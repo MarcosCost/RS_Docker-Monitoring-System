@@ -1,0 +1,11 @@
+# Test containers
+services:
+
+  nginx-service:
+    image: nginx:alpine
+  agent-nginx:
+    build: ./agent
+    depends_on:
+      - nginx-service
+    network_mode: "service:nginx-service" 
+
