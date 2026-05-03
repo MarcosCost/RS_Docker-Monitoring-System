@@ -205,3 +205,8 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+src/mosquitto/mosquitto-data/*
+src/mosquitto/mosquitto-log/*
+!src/mosquitto/mosquitto-data/.gitkeep
+!src/mosquitto/mosquitto-log/.gitkeep

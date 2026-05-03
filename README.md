@@ -23,7 +23,7 @@ The agent performs dynamic service discovery to identify its "Parent" container 
 
 To function correctly, the agent must be granted read-only access to the Docker daemon and be explicitly attached to a target service's network stack.
 
-### Docker Compose Example
+### Agent Docker Compose Example
 
 ```yaml
 services:
@@ -43,3 +43,16 @@ services:
     container_name: agent-nginx-1          # Must be unique across the infrastructure
     environment:
       - MY_CONTAINER_NAME=agent-nginx-1    # Used by the agent for self-lookup, must match container name
+```
+
+## MMQT broker
+
+### Topic Hierarchy
+Topics are structured to allow granular monitoring and efficient wildcard filtering.
+
+| Topic Structure                 | Purpose                                                                 |
+| :---                            | :---                                                                    |
+| `monitor/services/<id>/meta`    | **Static Metadata**: Contains IP, Ports, Short Id and Service Name.     |
+| `monitor/services/<id>/health`  | **Ephemeral Pulse**: Periodic heartbeats to verify uptime.              |
+| `monitor/services/<id>/status`  | **Lifecycle Events**: Reports graceful shutdowns or unexpected crashes. |
+

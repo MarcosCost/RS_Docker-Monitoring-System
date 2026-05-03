@@ -1,18 +1,20 @@
 import docker
 import os
+import time
+import json
+import paho.mqtt.client as mqtt
 
 ### Discovery phase
-
+metadata= dict()
+ 
 client = docker.from_env()
 # Get agent's Id
 container_name = os.environ.get('MY_CONTAINER_NAME')
 
 try:
     me = client.containers.get(container_name)
-    print(f"Agent Container ID: {me.short_id} , container named {container_name}")
 except docker.errors.NotFound:
-    print(f"Still can't find myself! Docker thinks I am not: {container_name}")
-
+    print(f"Can't find myself! Docker thinks I am not: {container_name}")
 
 # Get parent container's Data
 network_mode = me.attrs["HostConfig"]["NetworkMode"]
@@ -21,7 +23,7 @@ network_mode = me.attrs["HostConfig"]["NetworkMode"]
 if network_mode.startswith("container:"):
     target_id = network_mode.split(":")[1]
     target = client.containers.get(target_id)
-    
+
     target.reload()
 
     # Data
@@ -31,8 +33,46 @@ if network_mode.startswith("container:"):
     # Wrap in a set {} to get rid of ipv4 and ipv6 duplicates
     ports = {f"Host {b['HostPort']} -> Container {p}" for p, bindings in port_data.items() if bindings  for b in bindings}
 
-    print(f"Linked to Target: {target.name} ({target.short_id})")
-    print(f"Shared IP Address: {ip_addr}")
-    print(f"Shared Ports: {', '.join(ports)}")
+    metadata.update({"Parent_id":target_id})
+    metadata.update({"Parent_name":target.name})
+    metadata.update({"Ip":ip_addr})
+    metadata.update({"Ports":list(ports)})
+
 else:
     print(f"Agent is not running in 'container' network mode. Current mode: {network_mode}")
+ 
+
+### Initiall publish of metadata
+
+BROKER_IP = os.getenv("MQTT_BROKER_ADDR", "mosquitto-broker") # services running in a diff machine must have the brokers IP in a env variable on the compose
+
+# Connect to broker and tell him who (agent) is talking
+client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"agent-{me.short_id}")
+ 
+#Setup last will for tracked service
+client.will_set(
+    topic=f"monitor/services/{target_id}/status", 
+    payload="OFFLINE", 
+    qos=1, 
+    retain=True
+)
+ 
+while True:
+    try:
+        client.connect(BROKER_IP, 1883, keepalive=10)
+        break
+    except:
+        print(f"Connecting to broker at {BROKER_IP}...")
+        time.sleep(2)
+ 
+client.loop_start()
+
+print(metadata)
+
+client.publish(
+    topic=f"monitor/services/{target_id}/meta", 
+    payload=json.dumps(metadata), 
+    retain=True
+)
+
+# TODO: heartbeat and gracefull shutdown
