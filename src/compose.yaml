@@ -41,5 +41,4 @@ services:
     container_name: agent-something-unique
     environment:
       - MY_CONTAINER_NAME=agent-something-unique
-      - PYTHONUNBUFFERED=1  # python was having some issued printing to the docker terminal this should force it to
-      
+      - PYTHONUNBUFFERED=1  # Python was having some issues printing to the docker terminal this should force it
