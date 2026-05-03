@@ -3,9 +3,28 @@ services:
 
   nginx-service:
     image: nginx:alpine
+    container_name: Nginx_container
+    hostname: hostname_do_docker
+    ports:
+      - "8080:80"
+    restart: always
+    environment:
+      - APP_ENV=testing
+      - MONITORING_ENABLED=true
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+
   agent-nginx:
     build: ./agent
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     depends_on:
       - nginx-service
     network_mode: "service:nginx-service" 
+    container_name: agent-something-unique
+    environment:
+      - MY_CONTAINER_NAME=agent-something-unique
 
