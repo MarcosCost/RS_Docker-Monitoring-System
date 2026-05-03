@@ -1,45 +1,45 @@
 # RS Docker Monitor
 Real-time Docker monitoring via MQTT. Academic project for the Networks and Services (RS) class.
 
-## Agent
+## Architecture: The Sidecar Pattern
 
-### Sidecar Pattern
+The monitoring agent is implemented as a Universal Sidecar. This architectural choice ensures that monitoring is non-intrusive; no modifications or extra configurations are required within the target services.
 
-The monitoring agent is designed as a Universal Sidecar. This means that no extra configuration is needed in the monitored services/containers. Instead the agent attaches itself to the target's network stack using Docker's network_mode.
+By using Docker's network_mode, the agent:
+* **Shared Network Stack**: Operates within the same Network Namespace as the target, sharing the identical IP address and routing table.
+* **Unified Perspective**: Reports telemetry (latency, connectivity, availability) exactly as the target service experiences it.
+* **Logical Decoupling**: Separates monitoring concerns from application logic, allowing for independent updates and service agnosticism.
 
-By using network_mode, the agent:
-- Shares the same IP address as the target service
-- Operates within the same Network Namespace, allowing it to report telemetry that is identical to the target's perspective.
-- Decouples monitoring logic from application logic
+## Self-Discovery Mechanism
 
-### Self-Discovery Mechanism
-The agent has the ability to identify its "Parent" service and extract network coordinates dynamically.
+The agent performs dynamic service discovery to identify its "Parent" container without manual hardcoding of network parameters in the compose file.
 
-Discovery Workflow:
-    
-    1 - The agent uses the MY_CONTAINER_NAME environment variable to find its own object in the Docker Engine
-    2 - Identifies the main service's ID from the HostConfig.NetworkMode attribute.
-    3 - Finds the main service's object in the Docker Engine and uses it to retrieve the proper network Coordinates
+### Discovery Workflow
+1. **Identity Lookup**: The agent queries the Docker Engine API (via the mounted socket) using the MY_CONTAINER_NAME environment variable to find its own container object.
+2. **Stack Inspection**: It inspects its own HostConfig.NetworkMode attribute to resolve the ID of the shared network stack (the "Target" service).
+3. **Coordinate Extraction**: The agent retrieves the Target service object to extract real-time network metadata, including internal IP addresses and exposed port mappings.
 
-### Docker
-To work properlly the agent needs to be correctly attatched to a service. Bellow follows an example:
-```Yaml
+## Deployment and Configuration
+
+To function correctly, the agent must be granted read-only access to the Docker daemon and be explicitly attached to a target service's network stack.
+
+### Docker Compose Example
+
+```yaml
 services:
-
+  # The primary service to be monitored
   nginx-service:
     image: nginx:alpine
-      ...
+    restart: always
 
+  # The monitoring service
   agent-nginx:
     build: ./agent
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro # Mandatory.
     depends_on:
       - nginx-service
-    network_mode: "service:nginx-service" # Must match the service this is depending on
-    container_name: agent-nginx-1  # Must match the container name in the environment variable, cannot have duplicate names in the docker compose file
+    network_mode: "service:nginx-service" # Attach to the target network stack
+    container_name: agent-nginx-1          # Must be unique across the infrastructure
     environment:
-      - MY_CONTAINER_NAME=agent-nginx-1
-
-
-```
+      - MY_CONTAINER_NAME=agent-nginx-1    # Used by the agent for self-lookup, must match container name
