@@ -52,7 +52,7 @@ client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"agent-{me.sho
 #Setup last will for tracked service
 client.will_set(
     topic=f"monitor/services/{target_id}/status", 
-    payload="OFFLINE", 
+    payload="CRASHED", 
     qos=1, 
     retain=True
 )
@@ -67,7 +67,6 @@ while True:
  
 client.loop_start()
 
-print(metadata)
 
 client.publish(
     topic=f"monitor/services/{target_id}/meta", 
@@ -75,4 +74,25 @@ client.publish(
     retain=True
 )
 
-# TODO: heartbeat and gracefull shutdown
+### Heartbeat
+
+while True:
+    target.reload()
+    if target.status == "running":
+        payload = {"timestamp":time.time()}
+
+        client.publish(
+            topic=f"monitor/services/{target_id}/health",
+            payload=json.dumps(payload)
+        )
+    else:
+        print(f"'{target.name}' is currently not running")
+        break
+    time.sleep(5)
+
+### Gracefull shutdown
+
+print("Clean shutdown initiated...")
+
+client.publish(f"monitor/services/{target_id}/status", "SHUTDOWN", retain=True)
+client.disconnect()
