@@ -20,52 +20,43 @@ No painel de eventos aparecem coisas como `REGISTERED`, `DOWN` e `RECOVERED`, e 
 
 A comunicação é feita via MQTT com mensagens em JSON. Os tópicos usados são:
 
-- `services/register` — para registo de serviços
-- `services/heartbeat/<service_id>` — para os heartbeats periódicos
-- `services/events` — opcional, para eventos gerados pelo monitor
+- `monitor/services/<ID>/meta` — para registo de serviços
+- `monitor/services/<ID>/health` — para os heartbeats periódicos
+- `monitor/services/<ID>/status` — Status do container (Up Down Crashed)
+
 
 Algumas regras gerais: os timestamps estão todos em ISO 8601 UTC, o `service_id` é uma string única por serviço, o `port` é inteiro e o `ip` é string.
 
 ### Mensagem de registo
 
-Publicada no tópico `services/register`:
+Publicada no tópico `monitor/services/<ID>/meta`:
 
 ```json
 {
-  "type": "register",
-  "service_id": "service_a",
-  "name": "service_a",
-  "ip": "172.18.0.10",
-  "port": 8000,
+  "Parent_id": "an id",
+  "Parent_name": "name",
+  "Ip":"ip_addr",
+  "Ports":"list(ports)",
   "registered_at": "2026-04-02T14:30:00Z"
 }
 ```
 
 ### Mensagem de heartbeat
 
-Publicada no tópico `services/heartbeat/<service_id>`:
+Publicada no tópico `monitor/services/<ID>/healthcheck`:
 
 ```json
 {
-  "type": "heartbeat",
-  "service_id": "service_a",
-  "timestamp": "2026-04-02T14:30:05Z"
+  "timestamp":"time"
 }
 ```
 
-### Mensagem de evento (opcional)
+### Mensagem de Status (opcional)
 
-Gerada pelo monitor e publicada em `services/events`:
+Gerada pelo monitor e publicada em `monitor/services/<ID>/status`:
 
-```json
-{
-  "type": "event",
-  "service_id": "service_a",
-  "event": "DOWN",
-  "timestamp": "2026-04-02T14:30:20Z",
-  "reason": "heartbeat timeout"
-}
-```
+String:
+"UP", "DOWN", "CRASHED"
 
 ---
 
