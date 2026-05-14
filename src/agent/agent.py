@@ -1,8 +1,9 @@
-import docker
+import docker # type: ignore
 import os
 import time
 import json
-import paho.mqtt.client as mqtt
+import paho.mqtt.client as mqtt # pyright: ignore[reportMissingImports]
+
 
 ### Discovery phase
 metadata= dict()
