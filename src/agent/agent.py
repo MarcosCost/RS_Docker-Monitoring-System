@@ -1,99 +1,153 @@
 import docker # type: ignore
+import socket
 import os
 import time
 import json
 import paho.mqtt.client as mqtt # pyright: ignore[reportMissingImports]
 
+def find_broker_ip():
+    UDP_IP = "0.0.0.0"
+    UDP_PORT = 9999 
 
-### Discovery phase
-metadata= dict()
- 
-client = docker.from_env()
-# Get agent's Id
-container_name = os.environ.get('MY_CONTAINER_NAME')
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    # FORCE THE OS TO SHARE THIS PORT AND ALLOW MULTIPLE LISTENERS
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.bind((UDP_IP, UDP_PORT))
+    print(f"Listening for UDP packets on port {UDP_PORT}...")
 
-try:
-    me = client.containers.get(container_name)
-except docker.errors.NotFound:
-    print(f"Can't find myself! Docker thinks I am not: {container_name}")
+    while True:
+        print("Im inside the while")
+        data, addr = sock.recvfrom(1024) # returns (data,addr) => (data,(ip,port))
+        print("I got a message on port 9999")
+        print(f"Recieved data:\n{data}\nAddress:{addr[0]}")
+        if "MQTT_BROKER_HERE" in data.decode():
+            print("Found the broker")
+            break
 
-# Get parent container's Data
-network_mode = me.attrs["HostConfig"]["NetworkMode"]
+    sock.close()
+    return  addr[0]
 
-# Make sure the agent is running attachet to another container
-if network_mode.startswith("container:"):
+def get_container_metadata(client, container_name):
+    """
+    Discovery phase: Get metadata about the container this agent is monitoring.
+    """
+    metadata = {}
+    
+    try:
+        me = client.containers.get(container_name)
+    except docker.errors.NotFound:
+        print(f"Can't find myself! Docker thinks I am not: {container_name}")
+        return None, None, None
+
+    # Get parent container's Data
+    network_mode = me.attrs["HostConfig"]["NetworkMode"]
+
+    # Make sure the agent is running attached to another container
+    if not network_mode.startswith("container:"):
+        print(f"Agent is not running in 'container' network mode. Current mode: {network_mode}")
+        return me, None, None
+
     target_id = network_mode.split(":")[1]
     target = client.containers.get(target_id)
-
     target.reload()
 
-    # Data
+    # Gather network data
     networks = target.attrs['NetworkSettings']['Networks']
     ip_addr = next(iter(networks.values()))['IPAddress']
     port_data = target.attrs['NetworkSettings']['Ports']
-    # Wrap in a set {} to get rid of ipv4 and ipv6 duplicates
-    ports = {f"Host {b['HostPort']} -> Container {p}" for p, bindings in port_data.items() if bindings  for b in bindings}
+    
+    # Wrap in a set to remove duplicates, then convert to list
+    ports = {f"Host {b['HostPort']} -> Container {p}" for p, bindings in port_data.items() if bindings for b in bindings}
 
-    metadata.update({"Parent_id":target_id})
-    metadata.update({"Parent_name":target.name})
-    metadata.update({"Ip":ip_addr})
-    metadata.update({"Ports":list(ports)})
+    metadata.update({
+        "Parent_id": target_id,
+        "Parent_name": target.name,
+        "Ip": ip_addr,
+        "Ports": list(ports)
+    })
 
-else:
-    print(f"Agent is not running in 'container' network mode. Current mode: {network_mode}")
- 
+    return me, target, metadata
 
-### Initiall publish of metadata
+def setup_mqtt_client(agent_id, target_id, broker_ip):
+    """
+    Connect to the MQTT broker and configure Last Will and Testament.
+    """
+    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"agent-{agent_id}")
+    
+    # Setup last will for tracked service
+    client.will_set(
+        topic=f"monitor/services/{target_id}/status", 
+        payload="CRASHED", 
+        qos=1, 
+        retain=True
+    )
+    
+    while True:
+        try:
+            print(f"Connecting to broker at {broker_ip}...")
+            client.connect(broker_ip, 1883, keepalive=10)
+            break
+        except Exception as e:
+            print(f"Failed to connect to broker: {e}. Retrying in 2s...")
+            time.sleep(2)
+    
+    client.loop_start()
+    return client
 
-BROKER_IP = os.getenv("MQTT_BROKER_ADDR", "mosquitto-broker") # services running in a diff machine must have the brokers IP in a env variable on the compose
-
-# Connect to broker and tell him who (agent) is talking
-client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"agent-{me.short_id}")
- 
-#Setup last will for tracked service
-client.will_set(
-    topic=f"monitor/services/{target_id}/status", 
-    payload="CRASHED", 
-    qos=1, 
-    retain=True
-)
- 
-while True:
+def run_heartbeat(client, target, target_id):
+    """
+    Main loop to publish health checks as long as the target container is running.
+    """
+    print(f"Starting heartbeat for target: {target_id}")
     try:
-        client.connect(BROKER_IP, 1883, keepalive=10)
-        break
-    except:
-        print(f"Connecting to broker at {BROKER_IP}...")
-        time.sleep(2)
- 
-client.loop_start()
+        while True:
+            target.reload()
+            if target.status == "running":
+                payload = {"timestamp": time.time()}
+                client.publish(
+                    topic=f"monitor/services/{target_id}/health",
+                    payload=json.dumps(payload)
+                )
+            else:
+                print(f"Target '{target.name}' is no longer running (status: {target.status})")
+                break
+            time.sleep(5)
+    except KeyboardInterrupt:
+        print("Heartbeat interrupted by user.")
 
+def main():
+    # 1. Initialization
+    docker_client = docker.from_env()
+    container_name = os.environ.get('MY_CONTAINER_NAME')
+    broker_ip = os.getenv(find_broker_ip(), "mosquitto-broker")
 
-client.publish(
-    topic=f"monitor/services/{target_id}/meta", 
-    payload=json.dumps(metadata), 
-    retain=True
-)
+    # 2. Discovery
+    me, target, metadata = get_container_metadata(docker_client, container_name)
+    
+    if not me or not target:
+        print("Discovery failed. Exiting.")
+        return
 
-### Heartbeat
+    target_id = metadata["Parent_id"]
 
-while True:
-    target.reload()
-    if target.status == "running":
-        payload = {"timestamp":time.time()}
+    # 3. MQTT Setup & Initial Publish
+    mqtt_client = setup_mqtt_client(me.short_id, target_id, broker_ip)
+    
+    print(f"Publishing initial metadata for {target_id}")
+    mqtt_client.publish(
+        topic=f"monitor/services/{target_id}/meta", 
+        payload=json.dumps(metadata), 
+        retain=True
+    )
 
-        client.publish(
-            topic=f"monitor/services/{target_id}/health",
-            payload=json.dumps(payload)
-        )
-    else:
-        print(f"'{target.name}' is currently not running")
-        break
-    time.sleep(5)
+    # 4. Heartbeat Loop
+    run_heartbeat(mqtt_client, target, target_id)
 
-### Gracefull shutdown
+    # 5. Graceful Shutdown
+    print("Clean shutdown initiated...")
+    mqtt_client.publish(f"monitor/services/{target_id}/status", "SHUTDOWN", retain=True)
+    mqtt_client.disconnect()
+    mqtt_client.loop_stop()
 
-print("Clean shutdown initiated...")
-
-client.publish(f"monitor/services/{target_id}/status", "SHUTDOWN", retain=True)
-client.disconnect()
+if __name__ == "__main__":
+    main()

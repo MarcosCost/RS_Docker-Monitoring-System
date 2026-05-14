@@ -20,6 +20,7 @@ services:
     container_name: Nginx_container
     hostname: hostname_do_docker
     ports:
+      - "9999:9999/udp"  # reserved to agents
       - "8080:80"
     restart: always
     environment:
