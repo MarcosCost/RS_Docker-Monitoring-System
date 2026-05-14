@@ -10,15 +10,13 @@ def find_broker_ip():
     UDP_PORT = 9999 
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    # FORCE THE OS TO SHARE THIS PORT AND ALLOW MULTIPLE LISTENERS
+
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.bind((UDP_IP, UDP_PORT))
     print(f"Listening for UDP packets on port {UDP_PORT}...")
 
     while True:
-        print("Im inside the while")
         data, addr = sock.recvfrom(1024) # returns (data,addr) => (data,(ip,port))
-        print("I got a message on port 9999")
         print(f"Recieved data:\n{data}\nAddress:{addr[0]}")
         if "MQTT_BROKER_HERE" in data.decode():
             print("Found the broker")
@@ -88,8 +86,8 @@ def setup_mqtt_client(agent_id, target_id, broker_ip):
             client.connect(broker_ip, 1883, keepalive=10)
             break
         except Exception as e:
-            print(f"Failed to connect to broker: {e}. Retrying in 2s...")
-            time.sleep(2)
+            print(f"Failed to connect to broker: {e}. Retrying in 5s...")
+            time.sleep(5)
     
     client.loop_start()
     return client
@@ -119,7 +117,7 @@ def main():
     # 1. Initialization
     docker_client = docker.from_env()
     container_name = os.environ.get('MY_CONTAINER_NAME')
-    broker_ip = os.getenv(find_broker_ip(), "mosquitto-broker")
+    broker_ip = find_broker_ip()
 
     # 2. Discovery
     me, target, metadata = get_container_metadata(docker_client, container_name)
@@ -127,6 +125,7 @@ def main():
     if not me or not target:
         print("Discovery failed. Exiting.")
         return
+    print("Got valid container metadata")
 
     target_id = metadata["Parent_id"]
 
