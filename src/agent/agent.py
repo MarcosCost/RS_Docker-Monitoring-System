@@ -13,13 +13,13 @@ def find_broker_ip():
 
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.bind((UDP_IP, UDP_PORT))
-    print(f"Listening for UDP packets on port {UDP_PORT}...")
+    print(f"\nListening for UDP packets on port {UDP_PORT}...")
 
     while True:
         data, addr = sock.recvfrom(1024) # returns (data,addr) => (data,(ip,port))
         print(f"Recieved data:\n{data}\nAddress:{addr[0]}")
         if "MQTT_BROKER_HERE" in data.decode():
-            print("Found the broker")
+            print("Found the broker\n")
             break
 
     sock.close()
@@ -125,14 +125,14 @@ def main():
     if not me or not target:
         print("Discovery failed. Exiting.")
         return
-    print("Got valid container metadata")
+    print("\nGot valid container metadata\n")
 
     target_id = metadata["Parent_id"]
 
     # 3. MQTT Setup & Initial Publish
     mqtt_client = setup_mqtt_client(me.short_id, target_id, broker_ip)
     
-    print(f"Publishing initial metadata for {target_id}")
+    print(f"\nPublishing initial metadata for {target_id}")
     mqtt_client.publish(
         topic=f"monitor/services/{target_id}/meta", 
         payload=json.dumps(metadata), 

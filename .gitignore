@@ -210,3 +210,5 @@ src/mosquitto/mosquitto-data/*
 src/mosquitto/mosquitto-log/*
 !src/mosquitto/mosquitto-data/.gitkeep
 !src/mosquitto/mosquitto-log/.gitkeep
+
+anotacoes.md
