@@ -43,10 +43,11 @@ def on_message(client, userdata, msg):
         msg_type = parts[3]
 
         if container_id not in estado_rede:
-            estado_rede[container_id] = {"ip": "N/A", "port": 0, "status": "UNKNOWN", "rtt": "N/A"}
+            estado_rede[container_id] = {"name": "N/A", "ip": "N/A", "port": 0, "status": "UNKNOWN", "rtt": "N/A"}
 
         if msg_type == "meta":
             payload = json.loads(msg.payload.decode('utf-8'))
+            estado_rede[container_id]["name"] = payload.get("Parent_name", "N/A")
             estado_rede[container_id]["ip"] = payload.get("Ip", "N/A")
             # Extracting first port number from ports list string like "Host 9999 -> Container 9999/udp"
             ports = payload.get("Ports", [])
@@ -67,44 +68,61 @@ def on_message(client, userdata, msg):
         # print(f"Error processing message: {e}")
         pass
 
-# TODO: rtt n pode ser medido no monitor, n da pra explicar aqui qualquer coisa mandem me msg q eu explico
-def medir_rtt():
-    while True:
-        for container_id, dados in estado_rede.items():
-            if dados["status"] == "UP" and dados["ip"] != "N/A" and dados["port"] != 0:
-                try:
-                    inicio = time.time()
-                    s = socket.create_connection((dados["ip"], dados["port"]), timeout=1)
-                    s.close()
-                    fim = time.time()
-                    rtt_ms = round((fim - inicio) * 1000, 2)
-                    estado_rede[container_id]["rtt"] = f"{rtt_ms} ms"
-
-                except (socket.timeout, ConnectionRefusedError, OSError):
-                    estado_rede[container_id]["rtt"] = "Falha TCP"
-        time.sleep(2)
-
 def imprimir_dashboard():
     while True:
-
         os.system('cls' if os.name == 'nt' else 'clear')
 
-        print("="*65)
+        # Define headers and their initial minimum widths
+        headers = {
+            "ID": "ID",
+            "NAME": "PARENT NAME",
+            "IP": "IP",
+            "PORTA": "PORTA",
+            "STATUS": "STATUS",
+            "RTT": "RTT"
+        }
+        
+        # Calculate dynamic widths
+        col_widths = {k: len(v) for k, v in headers.items()}
+        
+        for container_id, dados in estado_rede.items():
+            short_id = container_id[:12]
+            col_widths["ID"] = max(col_widths["ID"], len(short_id))
+            col_widths["NAME"] = max(col_widths["NAME"], len(str(dados.get("name", ""))))
+            col_widths["IP"] = max(col_widths["IP"], len(str(dados.get("ip", ""))))
+            col_widths["PORTA"] = max(col_widths["PORTA"], len(str(dados.get("port", ""))))
+            col_widths["STATUS"] = max(col_widths["STATUS"], len(str(dados.get("status", ""))))
+            col_widths["RTT"] = max(col_widths["RTT"], len(str(dados.get("rtt", ""))))
+
+        # Total width for separators
+        total_width = sum(col_widths.values()) + (len(col_widths) * 3) - 1
+
+        print("=" * total_width)
         print(f"MAPA DE SAÚDE DA INFRAESTRUTURA DOCKER - {time.strftime('%H:%M:%S')}")
-        print("="*65)
-        print(f"{'CONTAINER ID':<15} | {'IP':<15} | {'PORTA':<6} | {'STATUS':<6} | {'RTT'}")
-        print("-" * 65)
+        print("=" * total_width)
+        
+        # Print Header
+        header_row = " | ".join([f"{headers[k]:<{col_widths[k]}}" for k in headers])
+        print(header_row)
+        print("-" * total_width)
 
         if not estado_rede:
             print("A aguardar dados dos agentes...")
         else:
             for container_id, dados in estado_rede.items():
-                print(f"{container_id:<15} | {dados['ip']:<15} | {dados['port']:<6} | {dados['status']:<6} | {dados['rtt']}")
+                short_id = container_id[:12]
+                row = [
+                    f"{short_id:<{col_widths['ID']}}",
+                    f"{str(dados.get('name', '')):<{col_widths['NAME']}}",
+                    f"{str(dados.get('ip', '')):<{col_widths['IP']}}",
+                    f"{str(dados.get('port', '')):<{col_widths['PORTA']}}",
+                    f"{str(dados.get('status', '')):<{col_widths['STATUS']}}",
+                    f"{str(dados.get('rtt', '')):<{col_widths['RTT']}}"
+                ]
+                print(" | ".join(row))
 
-        print("="*65)
-        time.sleep(1) 
-
-
+        print("=" * total_width)
+        time.sleep(1)
 
 if __name__ == "__main__":
     # Configura o cliente MQTT
