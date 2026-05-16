@@ -5,10 +5,10 @@ import socket
 import re
 from threading import Thread
 
-from rich.console import Group
-from rich.live import Live
-from rich.panel import Panel
-from rich.table import Table
+from rich.console import Group # type: ignore
+from rich.live import Live # type: ignore
+from rich.panel import Panel # type: ignore
+from rich.table import Table # type: ignore
 
 estado_rede = {}
 eventos = []
@@ -28,8 +28,19 @@ def add_event(message):
 
 # 1. Função da thread q publica o seu Ip na rede a cada 5s
 def publish_ip():
+
+    # Get machine's public Ip
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        machine_ip = s.getsockname()[0]
+    except Exception:
+        machine_ip = "127.0.0.1"
+    finally:
+        s.close()
+
     BROADCAST_PORT = 9999
-    MESSAGE = b"MQTT_BROKER_HERE"
+    MESSAGE = f"MQTT_BROKER_HERE:{machine_ip}".encode()
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
@@ -41,6 +52,8 @@ def publish_ip():
             time.sleep(5)
     except KeyboardInterrupt:
         print('\nKeyboard Shutdown, Stopping the Ip shouting!')
+    finally:
+        sock.close()
 
 # 2. Funções de Callback do MQTT
 def on_connect(client, userdata, flags, reason_code, properties):

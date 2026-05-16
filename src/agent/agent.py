@@ -25,7 +25,7 @@ def find_broker_ip():
             break
 
     sock.close()
-    return  addr[0]
+    return  data.decode().split(":")[1]
 
 def get_container_metadata(client, container_name):
     """
