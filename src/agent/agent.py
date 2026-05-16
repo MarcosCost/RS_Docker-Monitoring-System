@@ -5,6 +5,8 @@ import time
 import json
 import paho.mqtt.client as mqtt # pyright: ignore[reportMissingImports]
 
+BROKER_PORT=1883
+
 def find_broker_ip():
     UDP_IP = "0.0.0.0"
     UDP_PORT = 9999 
@@ -83,7 +85,7 @@ def setup_mqtt_client(agent_id, target_id, broker_ip):
     while True:
         try:
             print(f"Connecting to broker at {broker_ip}...")
-            client.connect(broker_ip, 1883, keepalive=10)
+            client.connect(broker_ip, BROKER_PORT, keepalive=10)
             break
         except Exception as e:
             print(f"Failed to connect to broker: {e}. Retrying in 5s...")
@@ -112,6 +114,28 @@ def run_heartbeat(client, target, target_id):
             time.sleep(5)
     except KeyboardInterrupt:
         print("Heartbeat interrupted by user.")
+
+def get_rtt(ip):
+    """
+    Open a TCP socket to simulate the networks RTT from one machine to another
+    Returns the time in Ms    
+    """
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(5.0)
+
+    inicio = time.perf_counter()
+    try:
+        sock.connect((ip, BROKER_PORT))
+        fim = time.perf_counter()
+
+        rtt_ms = (fim - inicio) * 1000
+        return round(rtt_ms, 2)
+    except socket.error as e:
+        print(f"Erro ao medir RTT por TCP: {e}")
+        return "N/A"
+    finally:
+        sock.close()
+        
 
 def main():
     # 1. Initialization
