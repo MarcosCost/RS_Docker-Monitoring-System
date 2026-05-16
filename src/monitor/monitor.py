@@ -2,14 +2,29 @@ import paho.mqtt.client as mqtt  # type: ignore
 import json
 import time
 import socket
-import os
 from threading import Thread
 
+from rich.console import Group
+from rich.live import Live
+from rich.panel import Panel
+from rich.table import Table
+
 estado_rede = {}
+eventos = []
+
+HEARTBEAT_TIMEOUT = 12
+RTT_CHECK_INTERVAL = 2
+MAX_EVENTS = 6
 
 BROKER_IP = "127.0.0.1" # Both Monitor and broker are running in "network_mode: host" so they share localhost
 BROKER_PORT = 1883
 TOPIC_SUBSCRIBE = "monitor/services/#"
+
+def add_event(message):
+    timestamp = time.strftime("%H:%M:%S")
+    eventos.append(f"{timestamp} {message}")
+    if len(eventos) > MAX_EVENTS:
+        eventos.pop(0)
 
 # 1. Função da thread q publica o seu Ip na rede a cada 5s
 def publish_ip():
@@ -43,86 +58,200 @@ def on_message(client, userdata, msg):
         msg_type = parts[3]
 
         if container_id not in estado_rede:
-            estado_rede[container_id] = {"name": "N/A", "ip": "N/A", "port": 0, "status": "UNKNOWN", "rtt": "N/A"}
+            estado_rede[container_id] = {
+                "name": "N/A",
+                "ip": "N/A",
+                "port": 0,
+                "status": "UNKNOWN",
+                "rtt": "N/A",
+                "last_seen": None,
+                "registered_at": None,
+            }
 
         if msg_type == "meta":
             payload = json.loads(msg.payload.decode('utf-8'))
             estado_rede[container_id]["name"] = payload.get("Parent_name", "N/A")
             estado_rede[container_id]["ip"] = payload.get("Ip", "N/A")
-            # Extracting first port number from ports list string like "Host 9999 -> Container 9999/udp"
+
             ports = payload.get("Ports", [])
-            if ports:
-                try:
-                    # Very simple parsing for the port number
-                    port_str = ports[0].split('-> Container ')[1].split('/')[0]
-                    estado_rede[container_id]["port"] = int(port_str)
-                except (IndexError, ValueError):
-                    pass
+            estado_rede[container_id]["port"] = extrair_porta_tcp(ports)
+
+            if estado_rede[container_id]["registered_at"] is None:
+                estado_rede[container_id]["registered_at"] = time.time()
+
+            add_event(f"{container_id[:12]} REGISTERED")
+
+        elif msg_type in {"health", "healthcheck", "heartbeat"}:
+            try:
+                json.loads(msg.payload.decode('utf-8'))
+            except json.JSONDecodeError:
+                pass
+
+            previous_status = estado_rede[container_id]["status"]
+            estado_rede[container_id]["last_seen"] = time.time()
             estado_rede[container_id]["status"] = "UP"
 
+            if estado_rede[container_id]["registered_at"] is None:
+                estado_rede[container_id]["registered_at"] = time.time()
+
+            if previous_status == "DOWN":
+                add_event(f"{container_id[:12]} RECOVERED")
+
         elif msg_type == "status":
-            status = msg.payload.decode('utf-8')
+            status = msg.payload.decode('utf-8').strip().upper()
+            old_status = estado_rede[container_id]["status"]
             estado_rede[container_id]["status"] = status
+
+            if old_status != status:
+                add_event(f"{container_id[:12]} {status}")
 
     except Exception as e:
         # print(f"Error processing message: {e}")
         pass
 
-def imprimir_dashboard():
+def extrair_porta_tcp(ports):
+    if not isinstance(ports, list):
+        return 0
+
+    # primeiro tenta encontrar uma porta TCP
+    for entry in ports:
+        if "/tcp" in entry:
+            try:
+                return int(entry.split("-> Container ")[1].split("/")[0])
+            except (IndexError, ValueError):
+                continue
+
+    # se não encontrar TCP, tenta qualquer porta
+    for entry in ports:
+        try:
+            return int(entry.split("-> Container ")[1].split("/")[0])
+        except (IndexError, ValueError):
+            continue
+
+    return 0
+
+def medir_rtt():
     while True:
-        os.system('cls' if os.name == 'nt' else 'clear')
-
-        # Define headers and their initial minimum widths
-        headers = {
-            "ID": "ID",
-            "NAME": "PARENT NAME",
-            "IP": "IP",
-            "PORTA": "PORTA",
-            "STATUS": "STATUS",
-            "RTT": "RTT"
-        }
-        
-        # Calculate dynamic widths
-        col_widths = {k: len(v) for k, v in headers.items()}
-        
         for container_id, dados in estado_rede.items():
-            short_id = container_id[:12]
-            col_widths["ID"] = max(col_widths["ID"], len(short_id))
-            col_widths["NAME"] = max(col_widths["NAME"], len(str(dados.get("name", ""))))
-            col_widths["IP"] = max(col_widths["IP"], len(str(dados.get("ip", ""))))
-            col_widths["PORTA"] = max(col_widths["PORTA"], len(str(dados.get("port", ""))))
-            col_widths["STATUS"] = max(col_widths["STATUS"], len(str(dados.get("status", ""))))
-            col_widths["RTT"] = max(col_widths["RTT"], len(str(dados.get("rtt", ""))))
+            ip = dados.get("ip", "N/A")
+            port = dados.get("port", 0)
+            status = dados.get("status", "UNKNOWN")
 
-        # Total width for separators
-        total_width = sum(col_widths.values()) + (len(col_widths) * 3) - 1
+            if status == "UP" and ip != "N/A" and port:
+                try:
+                    inicio = time.time()
+                    s = socket.create_connection((ip, port), timeout=1)
+                    s.close()
+                    fim = time.time()
 
-        print("=" * total_width)
-        print(f"MAPA DE SAÚDE DA INFRAESTRUTURA DOCKER - {time.strftime('%H:%M:%S')}")
-        print("=" * total_width)
-        
-        # Print Header
-        header_row = " | ".join([f"{headers[k]:<{col_widths[k]}}" for k in headers])
-        print(header_row)
-        print("-" * total_width)
+                    rtt_ms = round((fim - inicio) * 1000, 2)
+                    estado_rede[container_id]["rtt"] = f"{rtt_ms} ms"
 
-        if not estado_rede:
-            print("A aguardar dados dos agentes...")
-        else:
-            for container_id, dados in estado_rede.items():
-                short_id = container_id[:12]
-                row = [
-                    f"{short_id:<{col_widths['ID']}}",
-                    f"{str(dados.get('name', '')):<{col_widths['NAME']}}",
-                    f"{str(dados.get('ip', '')):<{col_widths['IP']}}",
-                    f"{str(dados.get('port', '')):<{col_widths['PORTA']}}",
-                    f"{str(dados.get('status', '')):<{col_widths['STATUS']}}",
-                    f"{str(dados.get('rtt', '')):<{col_widths['RTT']}}"
-                ]
-                print(" | ".join(row))
+                except (socket.timeout, ConnectionRefusedError, OSError):
+                    estado_rede[container_id]["rtt"] = "Falha TCP"
 
-        print("=" * total_width)
+        time.sleep(2)
+
+def verificar_timeouts():
+    while True:
+        now = time.time()
+
+        for container_id, dados in estado_rede.items():
+            last_seen = dados.get("last_seen")
+
+            if last_seen is not None:
+                age = now - last_seen
+                if age > HEARTBEAT_TIMEOUT and dados["status"] == "UP":
+                    dados["status"] = "DOWN"
+                    add_event(f"{container_id[:12]} DOWN (heartbeat timeout)")
+
         time.sleep(1)
+        
+def format_last_seen(timestamp_value):
+    if timestamp_value is None:
+        return "--"
+    return time.strftime("%H:%M:%S", time.localtime(timestamp_value))
+
+
+def build_services_table():
+    table = Table(title="Docker Health Monitor", expand=True)
+    
+    table.add_column("Service ID", style="cyan", overflow="fold", max_width=24)
+    table.add_column("Name", overflow="fold", max_width=18)
+    table.add_column("IP", style="magenta", no_wrap=True)
+    table.add_column("Port", justify="right", no_wrap=True)
+    table.add_column("State", justify="center", no_wrap=True)
+    table.add_column("RTT", justify="right", no_wrap=True)
+    table.add_column("Last Seen", justify="center", no_wrap=True)
+    table.add_column("HB Age (s)", justify="right", no_wrap=True)
+    table.add_column("Uptime (s)", justify="right", no_wrap=True)
+
+    if not estado_rede:
+        table.add_row("-", "A aguardar dados dos agentes...", "-", "-", "-", "-", "-", "-", "-")
+        return table
+
+    now = time.time()
+
+    for container_id, dados in estado_rede.items():
+        state = dados.get("status", "UNKNOWN")
+
+        if state == "UP":
+            state_text = "[green]UP[/green]"
+        elif state == "DOWN":
+            state_text = "[red]DOWN[/red]"
+        elif state == "CRASHED":
+            state_text = "[bold red]CRASHED[/bold red]"
+        else:
+            state_text = "[yellow]UNKNOWN[/yellow]"
+
+        last_seen = dados.get("last_seen")
+        hb_age = "--" if last_seen is None else f"{now - last_seen:.1f}"
+
+        registered_at = dados.get("registered_at")
+        uptime = "--" if registered_at is None else str(int(now - registered_at))
+
+        table.add_row(
+            container_id,
+            str(dados.get("name", "")),
+            str(dados.get("ip", "")),
+            str(dados.get("port", "")),
+            state_text,
+            str(dados.get("rtt", "N/A")),
+            format_last_seen(last_seen),
+            hb_age,
+            uptime,
+        )
+
+    return table
+
+
+def build_events_panel():
+    content = "No recent events" if not eventos else "\n".join(eventos[-MAX_EVENTS:])
+    return Panel(content, title="Recent Events", border_style="blue")
+
+
+def build_header():
+    text = (
+        f"Broker: mqtt://{BROKER_IP}:{BROKER_PORT} | "
+        f"Topic: {TOPIC_SUBSCRIBE} | "
+        f"Timeout: {HEARTBEAT_TIMEOUT}s"
+    )
+    return Panel(text, title="System Info", border_style="green")
+
+
+def build_dashboard():
+    return Group(
+        build_header(),
+        build_services_table(),
+        build_events_panel(),
+    )
+
+
+def run_dashboard():
+    with Live(build_dashboard(), refresh_per_second=2, screen=True) as live:
+        while True:
+            live.update(build_dashboard())
+            time.sleep(1)
 
 if __name__ == "__main__":
     # Configura o cliente MQTT
@@ -135,14 +264,20 @@ if __name__ == "__main__":
     client.loop_start() 
 
     # Thread the grita o seu Ip pro void
-    thread = Thread(target = publish_ip)
+    thread = Thread(target=publish_ip, daemon=True)
     thread.start()
+
+    rtt_thread = Thread(target=medir_rtt, daemon=True)
+    rtt_thread.start()
+
+    timeout_thread = Thread(target=verificar_timeouts, daemon=True)
+    timeout_thread.start()
 
     # Inicia a interface visual no terminal (bloqueia o script principal aqui)
     try:
-        imprimir_dashboard()
+        run_dashboard()
     except KeyboardInterrupt:
         print("\nA encerrar o monitor...")
+    finally:
         client.loop_stop()
         client.disconnect()
-        thread.join()
