@@ -94,27 +94,6 @@ def setup_mqtt_client(agent_id, target_id, broker_ip):
     client.loop_start()
     return client
 
-def run_heartbeat(client, target, target_id):
-    """
-    Main loop to publish health checks as long as the target container is running.
-    """
-    print(f"Starting heartbeat for target: {target_id}")
-    try:
-        while True:
-            target.reload()
-            if target.status == "running":
-                payload = {"timestamp": time.time()}
-                client.publish(
-                    topic=f"monitor/services/{target_id}/health",
-                    payload=json.dumps(payload)
-                )
-            else:
-                print(f"Target '{target.name}' is no longer running (status: {target.status})")
-                break
-            time.sleep(5)
-    except KeyboardInterrupt:
-        print("Heartbeat interrupted by user.")
-
 def get_rtt(ip):
     """
     Open a TCP socket to simulate the networks RTT from one machine to another
@@ -135,6 +114,27 @@ def get_rtt(ip):
         return "N/A"
     finally:
         sock.close()
+
+def run_heartbeat(client, target, target_id, broker_ip):
+    """
+    Main loop to publish health checks as long as the target container is running.
+    """
+    print(f"Starting heartbeat for target: {target_id}")
+    try:
+        while True:
+            target.reload()
+            if target.status == "running":
+                payload = {"timestamp": time.time(), "RTT":get_rtt(broker_ip)}
+                client.publish(
+                    topic=f"monitor/services/{target_id}/health",
+                    payload=json.dumps(payload)
+                )
+            else:
+                print(f"Target '{target.name}' is no longer running (status: {target.status})")
+                break
+            time.sleep(5)
+    except KeyboardInterrupt:
+        print("Heartbeat interrupted by user.")
         
 
 def main():
@@ -164,7 +164,7 @@ def main():
     )
 
     # 4. Heartbeat Loop
-    run_heartbeat(mqtt_client, target, target_id)
+    run_heartbeat(mqtt_client, target, target_id, broker_ip)
 
     # 5. Graceful Shutdown
     print("Clean shutdown initiated...")
