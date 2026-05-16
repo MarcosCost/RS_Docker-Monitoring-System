@@ -15,7 +15,7 @@ services:
     restart: always
 
   monitor-service:
-    build: ./monitor
+    build: ../monitor
     container_name: dashboard-monitor
     network_mode: host
     depends_on:
@@ -46,7 +46,7 @@ services:
           memory: 256M
 
   agent-nginx:
-    build: ./agent
+    build: ../agent
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     depends_on:

@@ -51,6 +51,15 @@ def get_container_metadata(client, container_name):
     target = client.containers.get(target_id)
     target.reload()
 
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        machine_ip = s.getsockname()[0]
+    except Exception:
+        machine_ip = "127.0.0.1"
+    finally:
+        s.close()
+
     # Gather network data
     networks = target.attrs['NetworkSettings']['Networks']
     ip_addr = next(iter(networks.values()))['IPAddress']
@@ -62,7 +71,8 @@ def get_container_metadata(client, container_name):
     metadata.update({
         "Parent_id": target_id,
         "Parent_name": target.name,
-        "Ip": ip_addr,
+        "Ip": machine_ip,
+        "Docker_container_ip" : ip_addr,
         "Ports": list(ports)
     })
 
