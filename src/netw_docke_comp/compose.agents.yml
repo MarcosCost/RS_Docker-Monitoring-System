@@ -18,7 +18,7 @@ services:
           memory: 256M
 
   agent-nginx:
-    build: ./agent
+    build: ../agent
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     depends_on:
