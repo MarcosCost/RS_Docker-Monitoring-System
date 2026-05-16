@@ -19,8 +19,8 @@ def find_broker_ip():
 
     while True:
         data, addr = sock.recvfrom(1024) # returns (data,addr) => (data,(ip,port))
-        print(f"Recieved data:\n{data}\nAddress:{addr[0]}")
-        if "MQTT_BROKER_HERE" in data.decode():
+        print(f"Recieved data:\n{data.decode()}\nAddress:{data.decode().split(":")[1]}")
+        if "MQTT_BROKER_HERE" in data.decode('utf-8', errors='ignore'):
             print("Found the broker\n")
             break
 
