@@ -71,6 +71,9 @@ def on_message(client, userdata, msg):
         container_id = parts[2]
         msg_type = parts[3]
 
+        if container_id in estado_rede and msg_type == "meta":
+            return
+
         # If its the first time this container has been processed
         if container_id not in estado_rede:
             estado_rede[container_id] = {
@@ -152,18 +155,23 @@ def format_last_seen(timestamp_value):
         return "--"
     return time.strftime("%H:%M:%S", time.localtime(timestamp_value))
 
+def format_uptime(seconds):
+    h = seconds // 3600
+    m = (seconds % 3600) // 60
+    s = seconds % 60
+    return f"{h}h ,{m}m ,{s}s"
 
 def build_services_table():
     table = Table(title="Docker Health Monitor", expand=True)
-    
-    table.add_column("Service ID", style="cyan", overflow="fold", max_width=24)
-    table.add_column("Name", overflow="fold", max_width=18)
-    table.add_column("IP", style="magenta", no_wrap=True)
-    table.add_column("Ports", justify="right", no_wrap=True)
-    table.add_column("State", justify="center", no_wrap=True)
-    table.add_column("RTT", justify="right", no_wrap=True)
-    table.add_column("Last Seen", justify="center", no_wrap=True)
-    table.add_column("Uptime (s)", justify="right", no_wrap=True)
+        
+    table.add_column("Service ID",   justify="left", style="cyan",    overflow="fold", max_width=24,  min_width=10)
+    table.add_column("Name",         justify="left", style="white",   overflow="fold", max_width=18)
+    table.add_column("IP",           justify="left", style="magenta", no_wrap=True)
+    table.add_column("Ports",        justify="left", style="white",   no_wrap=True)
+    table.add_column("State",        justify="left", style="white",   no_wrap=True)
+    table.add_column("RTT",          justify="left", style="white",   no_wrap=True)
+    table.add_column("Last Seen",    justify="left", style="white",   no_wrap=True)
+    table.add_column("Uptime",       justify="left", style="white",   no_wrap=True)
 
     if not estado_rede:
         table.add_row("-", "A aguardar dados dos agentes...", "-", "-", "-", "-", "-", "-", "-")
@@ -186,7 +194,7 @@ def build_services_table():
         last_seen = dados.get("last_seen")
 
         registered_at = dados.get("registered_at")
-        uptime = "--" if registered_at is None else str(int(now - registered_at))
+        uptime = int(now - registered_at)
 
         table.add_row(
             container_id,
@@ -196,7 +204,7 @@ def build_services_table():
             state_text,
             str(dados.get("rtt", "N/A")),
             format_last_seen(last_seen),
-            uptime,
+            format_uptime(uptime),
         )
 
     return table
