@@ -70,6 +70,7 @@ def on_message(client, userdata, msg):
         container_id = parts[2]
         msg_type = parts[3]
 
+        # If its the first time this container has been processed
         if container_id not in estado_rede:
             estado_rede[container_id] = {
                 "name": "N/A",
@@ -94,25 +95,26 @@ def on_message(client, userdata, msg):
 
             add_event(f"{container_id[:12]} REGISTERED")
 
-        elif msg_type in {"health", "healthcheck", "heartbeat"}:
+
+        elif msg_type == "health":
+            payload = json.loads(msg.payload.decode('utf-8'))
             try:
-                payload = json.loads(msg.payload.decode('utf-8'))
-                # Use the RTT provided by the agent in the payload
-                rtt_val = payload.get("rtt") or payload.get("RTT")
+                rtt_val = payload.get("RTT")
                 if rtt_val:
                     estado_rede[container_id]["rtt"] = f"{rtt_val} ms"
             except json.JSONDecodeError:
                 pass
 
             previous_status = estado_rede[container_id]["status"]
-            estado_rede[container_id]["last_seen"] = time.time()
-            estado_rede[container_id]["status"] = "UP"
+            estado_rede[container_id]["last_seen"] = payload.get("timestamp")
 
             if estado_rede[container_id]["registered_at"] is None:
                 estado_rede[container_id]["registered_at"] = time.time()
 
-            if previous_status == "DOWN":
+            if previous_status in {"DOWN" , "CRASHED"}:
+                estado_rede[container_id]["status"] = "UP"
                 add_event(f"{container_id[:12]} RECOVERED")
+
 
         elif msg_type == "status":
             status = msg.payload.decode('utf-8').strip().upper()
@@ -123,8 +125,7 @@ def on_message(client, userdata, msg):
                 add_event(f"{container_id[:12]} {status}")
 
     except Exception as e:
-        # print(f"Error processing message: {e}")
-        pass
+        eventos.append("Error in received message")
 
 def extrair_porta_tcp(ports):
     if not isinstance(ports, list):
@@ -142,20 +143,6 @@ def extrair_porta_tcp(ports):
 
     return None
 
-def verificar_timeouts():
-    while True:
-        now = time.time()
-
-        for container_id, dados in estado_rede.items():
-            last_seen = dados.get("last_seen")
-
-            if last_seen is not None:
-                age = now - last_seen
-                if age > HEARTBEAT_TIMEOUT and dados["status"] == "UP":
-                    dados["status"] = "DOWN"
-                    add_event(f"{container_id[:12]} DOWN (heartbeat timeout)")
-
-        time.sleep(1)
         
 def format_last_seen(timestamp_value):
     if timestamp_value is None:
@@ -257,14 +244,12 @@ if __name__ == "__main__":
     thread = Thread(target=publish_ip, daemon=True)
     thread.start()
 
-    timeout_thread = Thread(target=verificar_timeouts, daemon=True)
-    timeout_thread.start()
-
     # Inicia a interface visual no terminal (bloqueia o script principal aqui)
     try:
         run_dashboard()
     except KeyboardInterrupt:
         print("\nA encerrar o monitor...")
     finally:
+        thread.join()
         client.loop_stop()
         client.disconnect()
