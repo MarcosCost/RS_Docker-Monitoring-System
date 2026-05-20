@@ -203,7 +203,7 @@ def build_services_table():
 
 
 def build_events_panel():
-    content = "No recent events" if not eventos else "\n".join(eventos[-MAX_EVENTS:])
+    content = "No recent events" if not eventos else "\n".join(reversed(eventos[-MAX_EVENTS:]))
     return Panel(content, title="Recent Events", border_style="blue")
 
 
