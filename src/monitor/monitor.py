@@ -16,7 +16,7 @@ eventos = []
 HEARTBEAT_TIMEOUT = 12
 MAX_EVENTS = 6
 
-BROKER_IP = "127.0.0.1" # Both Monitor and broker are running in "network_mode: host" so they share localhost
+BROKER_IP = "localhost" # Both Monitor and broker are running in "network_mode: host" so they share localhost
 BROKER_PORT = 1883
 TOPIC_SUBSCRIBE = "monitor/services/#"
 
@@ -39,6 +39,7 @@ def publish_ip():
     finally:
         s.close()
 
+    BROKER_IP = machine_ip
     BROADCAST_PORT = 9999
     MESSAGE = f"MQTT_BROKER_HERE:{machine_ip}".encode()
 
@@ -93,7 +94,9 @@ def on_message(client, userdata, msg):
             if estado_rede[container_id]["registered_at"] is None:
                 estado_rede[container_id]["registered_at"] = time.time()
 
+            estado_rede[container_id]["status"] = "UP"
             add_event(f"{container_id[:12]} REGISTERED")
+            
 
 
         elif msg_type == "health":
@@ -156,11 +159,10 @@ def build_services_table():
     table.add_column("Service ID", style="cyan", overflow="fold", max_width=24)
     table.add_column("Name", overflow="fold", max_width=18)
     table.add_column("IP", style="magenta", no_wrap=True)
-    table.add_column("Port", justify="right", no_wrap=True)
+    table.add_column("Ports", justify="right", no_wrap=True)
     table.add_column("State", justify="center", no_wrap=True)
     table.add_column("RTT", justify="right", no_wrap=True)
     table.add_column("Last Seen", justify="center", no_wrap=True)
-    table.add_column("HB Age (s)", justify="right", no_wrap=True)
     table.add_column("Uptime (s)", justify="right", no_wrap=True)
 
     if not estado_rede:
@@ -182,7 +184,6 @@ def build_services_table():
             state_text = "[yellow]UNKNOWN[/yellow]"
 
         last_seen = dados.get("last_seen")
-        hb_age = "--" if last_seen is None else f"{now - last_seen:.1f}"
 
         registered_at = dados.get("registered_at")
         uptime = "--" if registered_at is None else str(int(now - registered_at))
@@ -195,7 +196,6 @@ def build_services_table():
             state_text,
             str(dados.get("rtt", "N/A")),
             format_last_seen(last_seen),
-            hb_age,
             uptime,
         )
 

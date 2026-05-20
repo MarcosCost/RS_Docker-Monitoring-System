@@ -53,8 +53,12 @@ def get_container_metadata(client, container_name):
 
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        s.connect(("8.8.8.8", 80))
-        machine_ip = s.getsockname()[0]
+        with open("/proc/net/route") as f:
+            for line in f.readlines()[1:]:
+                fields = line.split()
+                if fields[1] == "00000000":
+                    gateway = int(fields[2], 16)
+                    machine_ip =  socket.inet_ntoa(gateway.to_bytes(4, "little"))
     except Exception:
         machine_ip = "127.0.0.1"
     finally:
