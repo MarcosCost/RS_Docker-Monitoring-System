@@ -51,18 +51,13 @@ def get_container_metadata(client, container_name):
     target = client.containers.get(target_id)
     target.reload()
 
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        with open("/proc/net/route") as f:
-            for line in f.readlines()[1:]:
-                fields = line.split()
-                if fields[1] == "00000000":
-                    gateway = int(fields[2], 16)
-                    machine_ip =  socket.inet_ntoa(gateway.to_bytes(4, "little"))
-    except Exception:
-        machine_ip = "127.0.0.1"
-    finally:
-        s.close()
+    host_info = client.containers.run(
+        "alpine", 
+        "sh -c \"ip route get 8.8.8.8 | awk '{print $7; exit}'\"",
+        network_mode="host",
+        remove=True
+    )
+    machine_ip = host_info.decode().strip()
 
     # Gather network data
     networks = target.attrs['NetworkSettings']['Networks']
