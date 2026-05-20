@@ -5,6 +5,8 @@ import time
 import json
 import paho.mqtt.client as mqtt # pyright: ignore[reportMissingImports]
 
+BROKER_PORT=1883
+
 def find_broker_ip():
     UDP_IP = "0.0.0.0"
     UDP_PORT = 9999 
@@ -17,13 +19,13 @@ def find_broker_ip():
 
     while True:
         data, addr = sock.recvfrom(1024) # returns (data,addr) => (data,(ip,port))
-        print(f"Recieved data:\n{data}\nAddress:{addr[0]}")
-        if "MQTT_BROKER_HERE" in data.decode():
+        print(f"Recieved data:\n{data.decode()}\nAddress:{data.decode().split(":")[1]}")
+        if "MQTT_BROKER_HERE" in data.decode('utf-8', errors='ignore'):
             print("Found the broker\n")
             break
 
     sock.close()
-    return  addr[0]
+    return  data.decode().split(":")[1]
 
 def get_container_metadata(client, container_name):
     """
@@ -49,6 +51,15 @@ def get_container_metadata(client, container_name):
     target = client.containers.get(target_id)
     target.reload()
 
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        machine_ip = s.getsockname()[0]
+    except Exception:
+        machine_ip = "127.0.0.1"
+    finally:
+        s.close()
+
     # Gather network data
     networks = target.attrs['NetworkSettings']['Networks']
     ip_addr = next(iter(networks.values()))['IPAddress']
@@ -60,7 +71,8 @@ def get_container_metadata(client, container_name):
     metadata.update({
         "Parent_id": target_id,
         "Parent_name": target.name,
-        "Ip": ip_addr,
+        "Ip": machine_ip,
+        "Docker_container_ip" : ip_addr,
         "Ports": list(ports)
     })
 
@@ -83,7 +95,7 @@ def setup_mqtt_client(agent_id, target_id, broker_ip):
     while True:
         try:
             print(f"Connecting to broker at {broker_ip}...")
-            client.connect(broker_ip, 1883, keepalive=10)
+            client.connect(broker_ip, BROKER_PORT, keepalive=10)
             break
         except Exception as e:
             print(f"Failed to connect to broker: {e}. Retrying in 5s...")
@@ -92,7 +104,28 @@ def setup_mqtt_client(agent_id, target_id, broker_ip):
     client.loop_start()
     return client
 
-def run_heartbeat(client, target, target_id):
+def get_rtt(ip):
+    """
+    Open a TCP socket to simulate the networks RTT from one machine to another
+    Returns the time in Ms    
+    """
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(5.0)
+
+    inicio = time.perf_counter()
+    try:
+        sock.connect((ip, BROKER_PORT))
+        fim = time.perf_counter()
+
+        rtt_ms = (fim - inicio) * 1000
+        return round(rtt_ms, 2)
+    except socket.error as e:
+        print(f"Erro ao medir RTT por TCP: {e}")
+        return "N/A"
+    finally:
+        sock.close()
+
+def run_heartbeat(client, target, target_id, broker_ip):
     """
     Main loop to publish health checks as long as the target container is running.
     """
@@ -101,7 +134,7 @@ def run_heartbeat(client, target, target_id):
         while True:
             target.reload()
             if target.status == "running":
-                payload = {"timestamp": time.time()}
+                payload = {"timestamp": time.time(), "RTT":get_rtt(broker_ip)}
                 client.publish(
                     topic=f"monitor/services/{target_id}/health",
                     payload=json.dumps(payload)
@@ -112,6 +145,7 @@ def run_heartbeat(client, target, target_id):
             time.sleep(5)
     except KeyboardInterrupt:
         print("Heartbeat interrupted by user.")
+        
 
 def main():
     # 1. Initialization
@@ -140,7 +174,7 @@ def main():
     )
 
     # 4. Heartbeat Loop
-    run_heartbeat(mqtt_client, target, target_id)
+    run_heartbeat(mqtt_client, target, target_id, broker_ip)
 
     # 5. Graceful Shutdown
     print("Clean shutdown initiated...")

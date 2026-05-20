@@ -1,0 +1,26 @@
+services:
+
+  # Monitor machine
+  mqtt-broker:
+    image: eclipse-mosquitto:latest
+    container_name: mosquitto-broker
+    network_mode: host
+    ports:
+      - "1883:1883"
+    volumes:
+      - ../mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - ../mosquitto/mosquitto-data:/mosquitto/data
+      - ../mosquitto/mosquitto-log:/mosquitto/log
+    restart: always
+
+  monitor-service:
+    build: ../monitor
+    container_name: dashboard-monitor
+    network_mode: host
+    depends_on:
+      - mqtt-broker
+    environment:
+      - PYTHONUNBUFFERED=1
+    tty: true
+    stdin_open: true
+    restart: always

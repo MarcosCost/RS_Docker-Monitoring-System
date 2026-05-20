@@ -212,3 +212,4 @@ src/mosquitto/mosquitto-log/*
 !src/mosquitto/mosquitto-log/.gitkeep
 
 anotacoes.md
+mqtt_reference.md

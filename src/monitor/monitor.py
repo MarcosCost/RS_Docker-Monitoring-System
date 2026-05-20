@@ -2,18 +2,18 @@ import paho.mqtt.client as mqtt  # type: ignore
 import json
 import time
 import socket
+import re
 from threading import Thread
 
-from rich.console import Group
-from rich.live import Live
-from rich.panel import Panel
-from rich.table import Table
+from rich.console import Group # type: ignore
+from rich.live import Live # type: ignore
+from rich.panel import Panel # type: ignore
+from rich.table import Table # type: ignore
 
 estado_rede = {}
 eventos = []
 
 HEARTBEAT_TIMEOUT = 12
-RTT_CHECK_INTERVAL = 2
 MAX_EVENTS = 6
 
 BROKER_IP = "127.0.0.1" # Both Monitor and broker are running in "network_mode: host" so they share localhost
@@ -28,8 +28,19 @@ def add_event(message):
 
 # 1. Função da thread q publica o seu Ip na rede a cada 5s
 def publish_ip():
+
+    # Get machine's public Ip
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        machine_ip = s.getsockname()[0]
+    except Exception:
+        machine_ip = "127.0.0.1"
+    finally:
+        s.close()
+
     BROADCAST_PORT = 9999
-    MESSAGE = b"MQTT_BROKER_HERE"
+    MESSAGE = f"MQTT_BROKER_HERE:{machine_ip}".encode()
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
@@ -41,6 +52,8 @@ def publish_ip():
             time.sleep(5)
     except KeyboardInterrupt:
         print('\nKeyboard Shutdown, Stopping the Ip shouting!')
+    finally:
+        sock.close()
 
 # 2. Funções de Callback do MQTT
 def on_connect(client, userdata, flags, reason_code, properties):
@@ -83,7 +96,11 @@ def on_message(client, userdata, msg):
 
         elif msg_type in {"health", "healthcheck", "heartbeat"}:
             try:
-                json.loads(msg.payload.decode('utf-8'))
+                payload = json.loads(msg.payload.decode('utf-8'))
+                # Use the RTT provided by the agent in the payload
+                rtt_val = payload.get("rtt") or payload.get("RTT")
+                if rtt_val:
+                    estado_rede[container_id]["rtt"] = f"{rtt_val} ms"
             except json.JSONDecodeError:
                 pass
 
@@ -111,46 +128,19 @@ def on_message(client, userdata, msg):
 
 def extrair_porta_tcp(ports):
     if not isinstance(ports, list):
-        return 0
+        return None
 
-    # primeiro tenta encontrar uma porta TCP
     for entry in ports:
-        if "/tcp" in entry:
-            try:
-                return int(entry.split("-> Container ")[1].split("/")[0])
-            except (IndexError, ValueError):
+        numbers = re.findall(r'\d+', entry)
+        
+        if len(numbers) == 2:
+            host_port, container_port = numbers            
+            if host_port == "9999" or container_port == "9999":
                 continue
+                
+            return f"{host_port} -> {container_port}"
 
-    # se não encontrar TCP, tenta qualquer porta
-    for entry in ports:
-        try:
-            return int(entry.split("-> Container ")[1].split("/")[0])
-        except (IndexError, ValueError):
-            continue
-
-    return 0
-
-def medir_rtt():
-    while True:
-        for container_id, dados in estado_rede.items():
-            ip = dados.get("ip", "N/A")
-            port = dados.get("port", 0)
-            status = dados.get("status", "UNKNOWN")
-
-            if status == "UP" and ip != "N/A" and port:
-                try:
-                    inicio = time.time()
-                    s = socket.create_connection((ip, port), timeout=1)
-                    s.close()
-                    fim = time.time()
-
-                    rtt_ms = round((fim - inicio) * 1000, 2)
-                    estado_rede[container_id]["rtt"] = f"{rtt_ms} ms"
-
-                except (socket.timeout, ConnectionRefusedError, OSError):
-                    estado_rede[container_id]["rtt"] = "Falha TCP"
-
-        time.sleep(2)
+    return None
 
 def verificar_timeouts():
     while True:
@@ -266,9 +256,6 @@ if __name__ == "__main__":
     # Thread the grita o seu Ip pro void
     thread = Thread(target=publish_ip, daemon=True)
     thread.start()
-
-    rtt_thread = Thread(target=medir_rtt, daemon=True)
-    rtt_thread.start()
 
     timeout_thread = Thread(target=verificar_timeouts, daemon=True)
     timeout_thread.start()
