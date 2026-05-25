@@ -5,7 +5,6 @@ services:
     container_name: Nginx_container
     hostname: hostname_do_docker
     ports:
-      - "9999:9999/udp"  # reserved to agents
       - "8080:80"
     restart: always
     environment:
@@ -28,3 +27,18 @@ services:
     environment:
       - MY_CONTAINER_NAME=agent-something-unique
       - PYTHONUNBUFFERED=1 
+
+
+  udp-relay:
+    image: alpine/socat
+    container_name: udp-relay
+    ports:
+      - "9999:9999/udp" 
+    command: udp-listen:9999,fork,reuseaddr udp-datagram:172.25.255.255:9999,broadcast
+
+networks:
+  default:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16
