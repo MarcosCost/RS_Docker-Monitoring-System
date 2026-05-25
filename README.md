@@ -1,58 +1,92 @@
-# RS Docker Monitor
-Real-time Docker monitoring via MQTT. Academic project for the Networks and Services (RS) class.
+# 🐳 RS Docker Monitor
 
-## Architecture: The Sidecar Pattern
+[![Project Status](https://img.shields.io/badge/Project-Academic-blue.svg)](https://github.com/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Docker](https://img.shields.io/badge/Docker-Enabled-blue.svg)](https://www.docker.com/)
+[![MQTT](https://img.shields.io/badge/MQTT-Mosquitto-orange.svg)](https://mosquitto.org/)
 
-The monitoring agent is implemented as a Universal Sidecar. This architectural choice ensures that monitoring is non-intrusive; no modifications or extra configurations are required within the target services.
+A real-time, non-intrusive Docker monitoring system built for the **Networks and Services (RS)** class. It leverages the **Sidecar Pattern** and **MQTT** to provide a centralized dashboard for service health and network metrics.
 
-By using Docker's network_mode, the agent:
-* **Shared Network Stack**: Operates within the same Network Namespace as the target, sharing the identical IP address and routing table.
-* **Unified Perspective**: Reports telemetry (latency, connectivity, availability) exactly as the target service experiences it.
-* **Logical Decoupling**: Separates monitoring concerns from application logic, allowing for independent updates and service agnosticism.
+---
 
-## Self-Discovery Mechanism
+## 🛠️ Architecture & Networking Concepts
 
-The agent performs dynamic service discovery to identify its "Parent" container without manual hardcoding of network parameters in the compose file.
+This project is a practical application of several fundamental networking and distributed systems concepts:
 
-### Discovery Workflow
-1. **Identity Lookup**: The agent queries the Docker Engine API (via the mounted socket) using the MY_CONTAINER_NAME environment variable to find its own container object.
-2. **Stack Inspection**: It inspects its own HostConfig.NetworkMode attribute to resolve the ID of the shared network stack (the "Target" service).
-3. **Coordinate Extraction**: The agent retrieves the Target service object to extract real-time network metadata, including internal IP addresses and exposed port mappings.
+### 🏎️ The Sidecar Pattern
+The monitoring agent is implemented as a **Universal Sidecar**. This architectural choice ensures that monitoring is completely decoupled from the application logic.
+* **Shared Network Stack**: Using Docker's `network_mode`, the agent shares the identical Network Namespace, IP address, and routing table as the target service.
+* **Transparent Monitoring**: It observes network conditions (like RTT) exactly as the target service experiences them.
 
-## Deployment and Configuration
+### 📡 Communication Stack
+- **MQTT (TCP/1883)**: The backbone of the telemetry system. Uses a **Publish/Subscribe** model for high scalability and real-time updates.
+- **UDP Discovery (Port 9999)**: Zero-config setup. The Monitor broadcasts its location via UDP, allowing Agents to find the MQTT Broker dynamically without hardcoded IPs.
+- **TCP Health Checks**: The Agent measures **Round-Trip Time (RTT)** by establishing lightweight TCP connections to the monitoring hub.
 
-To function correctly, the agent must be granted read-only access to the Docker daemon and be explicitly attached to a target service's network stack.
+---
 
-### Agent Docker Compose Example
+## 🔍 Self-Discovery Metadata Mechanism
 
-```yaml
-services:
-  # The primary service to be monitored
-  nginx-service:
-    image: nginx:alpine
-    restart: always
+The Agent autonomously identifies its "Parent" container via the Docker Engine API:
+1. **Identity Lookup**: Queries the Docker API using the `MY_CONTAINER_NAME` env variable.
+2. **Stack Inspection**: Resolves the shared network stack ID from its own `HostConfig.NetworkMode`.
+3. **Metadata Extraction**: Retrieves real-time network metadata (Internal IP, Port mappings) from the Target service.
 
-  # The monitoring service
-  agent-nginx:
-    build: ./agent
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro # Mandatory.
-    depends_on:
-      - nginx-service
-    network_mode: "service:nginx-service" # Attach to the target network stack
-    container_name: agent-nginx-1          # Must be unique across the infrastructure
-    environment:
-      - MY_CONTAINER_NAME=agent-nginx-1    # Used by the agent for self-lookup, must match container name
+---
+
+## 🚀 Quick Start
+
+### 1. Prerequisites
+- Docker & Docker Compose installed.
+
+### 2. Launch the Infrastructure
+To start the MQTT Broker, the Dashboard, and a sample Nginx service with its Agent:
+
+```bash
+docker-compose -f src/docker_composes/dockercompose.local.yaml up --build
 ```
 
-## MMQT broker
+### 3. Dashboard
+Once the containers are up, the **Rich Terminal Dashboard** will launch automatically, displaying:
+- **Service ID & Name**: Auto-discovered metadata.
+- **State**: Real-time status (UP, DOWN, CRASHED).
+- **RTT**: Network latency in milliseconds.
+- **Uptime**: Tracking how long the service has been running.
 
-### Topic Hierarchy
-Topics are structured to allow granular monitoring and efficient wildcard filtering.
+---
 
-| Topic Structure                 | Purpose                                                                 |
-| :---                            | :---                                                                    |
-| `monitor/services/<id>/meta`    | **Static Metadata**: Contains IP, Ports, Short Id and Service Name.     |
-| `monitor/services/<id>/health`  | **Ephemeral Pulse**: Periodic heartbeats to verify uptime.              |
-| `monitor/services/<id>/status`  | **Lifecycle Events**: Reports graceful shutdowns or unexpected crashes. |
+## 📊 MQTT Topic Hierarchy
 
+The system uses a structured topic hierarchy for granular monitoring and efficient wildcard filtering:
+
+| Topic Structure | Payload Description | QOS |
+| :--- | :--- | :--- |
+| `monitor/services/<id>/meta` | **Static Metadata**: IP, Ports, Service Name. | 1 (Retained) |
+| `monitor/services/<id>/health` | **Heartbeat**: Timestamp and RTT metrics. | 0 |
+| `monitor/services/<id>/status` | **Lifecycle**: Reports `SHUTDOWN` or `CRASHED` (LWT). | 1 (Retained) |
+
+---
+
+## 📁 Project Structure
+
+```text
+├── src/
+│   ├── agent/       # Sidecar Agent (Python + Docker API)
+│   ├── monitor/     # Terminal Dashboard & UDP Broadcaster
+│   ├── mosquitto/   # MQTT Broker configuration
+│   └── docker_composes/ # Deployment manifests
+├── docs/            # Documentation & Test plans
+└── Guia.md          # Comprehensive Project Guide (Presentation focus)
+```
+
+---
+
+## 🎓 Academic Context
+Developed for the **Redes e Serviços** course. 
+Focus: Network Protocols (TCP/UDP/MQTT), Containerization, and Distributed Monitoring.
+
+---
+*Developed by:*
+- Marcos Costa 125882
+- Keegan Azevedo ???
+- Jamilly Vitorya ???
