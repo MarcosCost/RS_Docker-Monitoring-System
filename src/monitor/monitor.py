@@ -16,7 +16,7 @@ eventos = []
 HEARTBEAT_TIMEOUT = 12
 MAX_EVENTS = 6
 
-BROKER_IP = "127.0.0.1" # Both Monitor and broker are running in "network_mode: host" so they share localhost
+BROKER_IP = "localhost" # Both Monitor and broker are running in "network_mode: host" so they share localhost
 BROKER_PORT = 1883
 TOPIC_SUBSCRIBE = "monitor/services/#"
 
@@ -39,6 +39,7 @@ def publish_ip():
     finally:
         s.close()
 
+    BROKER_IP = machine_ip
     BROADCAST_PORT = 9999
     MESSAGE = f"MQTT_BROKER_HERE:{machine_ip}".encode()
 
@@ -70,6 +71,10 @@ def on_message(client, userdata, msg):
         container_id = parts[2]
         msg_type = parts[3]
 
+        if container_id in estado_rede and msg_type == "meta":
+            return
+
+        # If its the first time this container has been processed
         if container_id not in estado_rede:
             estado_rede[container_id] = {
                 "name": "N/A",
@@ -92,27 +97,30 @@ def on_message(client, userdata, msg):
             if estado_rede[container_id]["registered_at"] is None:
                 estado_rede[container_id]["registered_at"] = time.time()
 
+            estado_rede[container_id]["status"] = "UP"
             add_event(f"{container_id[:12]} REGISTERED")
+            
 
-        elif msg_type in {"health", "healthcheck", "heartbeat"}:
+
+        elif msg_type == "health":
+            payload = json.loads(msg.payload.decode('utf-8'))
             try:
-                payload = json.loads(msg.payload.decode('utf-8'))
-                # Use the RTT provided by the agent in the payload
-                rtt_val = payload.get("rtt") or payload.get("RTT")
+                rtt_val = payload.get("RTT")
                 if rtt_val:
                     estado_rede[container_id]["rtt"] = f"{rtt_val} ms"
             except json.JSONDecodeError:
                 pass
 
             previous_status = estado_rede[container_id]["status"]
-            estado_rede[container_id]["last_seen"] = time.time()
-            estado_rede[container_id]["status"] = "UP"
+            estado_rede[container_id]["last_seen"] = payload.get("timestamp")
 
             if estado_rede[container_id]["registered_at"] is None:
                 estado_rede[container_id]["registered_at"] = time.time()
 
-            if previous_status == "DOWN":
+            if previous_status in {"DOWN" , "CRASHED"}:
+                estado_rede[container_id]["status"] = "UP"
                 add_event(f"{container_id[:12]} RECOVERED")
+
 
         elif msg_type == "status":
             status = msg.payload.decode('utf-8').strip().upper()
@@ -123,8 +131,7 @@ def on_message(client, userdata, msg):
                 add_event(f"{container_id[:12]} {status}")
 
     except Exception as e:
-        # print(f"Error processing message: {e}")
-        pass
+        eventos.append("Error in received message")
 
 def extrair_porta_tcp(ports):
     if not isinstance(ports, list):
@@ -142,39 +149,29 @@ def extrair_porta_tcp(ports):
 
     return None
 
-def verificar_timeouts():
-    while True:
-        now = time.time()
-
-        for container_id, dados in estado_rede.items():
-            last_seen = dados.get("last_seen")
-
-            if last_seen is not None:
-                age = now - last_seen
-                if age > HEARTBEAT_TIMEOUT and dados["status"] == "UP":
-                    dados["status"] = "DOWN"
-                    add_event(f"{container_id[:12]} DOWN (heartbeat timeout)")
-
-        time.sleep(1)
         
 def format_last_seen(timestamp_value):
     if timestamp_value is None:
         return "--"
     return time.strftime("%H:%M:%S", time.localtime(timestamp_value))
 
+def format_uptime(seconds):
+    h = seconds // 3600
+    m = (seconds % 3600) // 60
+    s = seconds % 60
+    return f"{h}h ,{m}m ,{s}s"
 
 def build_services_table():
     table = Table(title="Docker Health Monitor", expand=True)
-    
-    table.add_column("Service ID", style="cyan", overflow="fold", max_width=24)
-    table.add_column("Name", overflow="fold", max_width=18)
-    table.add_column("IP", style="magenta", no_wrap=True)
-    table.add_column("Port", justify="right", no_wrap=True)
-    table.add_column("State", justify="center", no_wrap=True)
-    table.add_column("RTT", justify="right", no_wrap=True)
-    table.add_column("Last Seen", justify="center", no_wrap=True)
-    table.add_column("HB Age (s)", justify="right", no_wrap=True)
-    table.add_column("Uptime (s)", justify="right", no_wrap=True)
+        
+    table.add_column("Service ID",   justify="left", style="cyan",    overflow="fold", max_width=24,  min_width=10)
+    table.add_column("Name",         justify="left", style="white",   overflow="fold", max_width=18)
+    table.add_column("IP",           justify="left", style="magenta", no_wrap=True)
+    table.add_column("Ports",        justify="left", style="white",   no_wrap=True)
+    table.add_column("State",        justify="left", style="white",   no_wrap=True)
+    table.add_column("RTT",          justify="left", style="white",   no_wrap=True)
+    table.add_column("Last Seen",    justify="left", style="white",   no_wrap=True)
+    table.add_column("Uptime",       justify="left", style="white",   no_wrap=True)
 
     if not estado_rede:
         table.add_row("-", "A aguardar dados dos agentes...", "-", "-", "-", "-", "-", "-", "-")
@@ -195,10 +192,9 @@ def build_services_table():
             state_text = "[yellow]UNKNOWN[/yellow]"
 
         last_seen = dados.get("last_seen")
-        hb_age = "--" if last_seen is None else f"{now - last_seen:.1f}"
 
         registered_at = dados.get("registered_at")
-        uptime = "--" if registered_at is None else str(int(now - registered_at))
+        uptime = int(now - registered_at)
 
         table.add_row(
             container_id,
@@ -208,15 +204,14 @@ def build_services_table():
             state_text,
             str(dados.get("rtt", "N/A")),
             format_last_seen(last_seen),
-            hb_age,
-            uptime,
+            format_uptime(uptime),
         )
 
     return table
 
 
 def build_events_panel():
-    content = "No recent events" if not eventos else "\n".join(eventos[-MAX_EVENTS:])
+    content = "No recent events" if not eventos else "\n".join(reversed(eventos[-MAX_EVENTS:]))
     return Panel(content, title="Recent Events", border_style="blue")
 
 
@@ -257,14 +252,12 @@ if __name__ == "__main__":
     thread = Thread(target=publish_ip, daemon=True)
     thread.start()
 
-    timeout_thread = Thread(target=verificar_timeouts, daemon=True)
-    timeout_thread.start()
-
     # Inicia a interface visual no terminal (bloqueia o script principal aqui)
     try:
         run_dashboard()
     except KeyboardInterrupt:
         print("\nA encerrar o monitor...")
     finally:
+        thread.join()
         client.loop_stop()
         client.disconnect()
