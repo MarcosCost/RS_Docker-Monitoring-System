@@ -1,35 +1,6 @@
 services:
 
   # ─── Databases ───────────────────────────────────────────────
-  postgres-primary:
-    image: postgres:16-alpine
-    container_name: postgres-primary
-    environment:
-      POSTGRES_DB: maindb
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: supersecret
-    ports:
-      - "5432:5432"
-    tmpfs:
-      - /var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  postgres-replica:
-    image: postgres:16-alpine
-    container_name: postgres-replica
-    environment:
-      POSTGRES_DB: maindb
-      POSTGRES_USER: readonly
-      POSTGRES_PASSWORD: readonly123
-    ports:
-      - "5433:5432"
-    tmpfs:
-      - /var/lib/postgresql/data
-
   mysql:
     image: mariadb:11
     container_name: mysql
@@ -235,19 +206,6 @@ services:
     ports:
       - "9100:9100"
 
-  # ─── Dev Tools / Admin UIs ────────────────────────────────────
-  pgadmin:
-    image: dpage/pgadmin4:8.6
-    container_name: pgadmin
-    depends_on:
-      - postgres-primary
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@example.com
-      PGADMIN_DEFAULT_PASSWORD: pgadminpass
-    ports:
-      - "5050:80"
-    tmpfs:
-      - /var/lib/pgadmin
 
   mongo-express:
     image: mongo-express:1.0.2
@@ -303,37 +261,6 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
-  # ─── Object Storage ───────────────────────────────────────────
-  minio:
-    image: minio/minio:latest
-    container_name: minio
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin123
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    tmpfs:
-      - /data
-
-  # ─── Auth ─────────────────────────────────────────────────────
-  keycloak:
-    image: quay.io/keycloak/keycloak:24.0
-    container_name: keycloak
-    command: start-dev
-    environment:
-      KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://postgres-primary:5432/maindb
-      KC_DB_USERNAME: admin
-      KC_DB_PASSWORD: supersecret
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: keycloakpass
-    depends_on:
-      - postgres-primary
-    ports:
-      - "8180:8080"
-
   # ─── CI / Task Runners ────────────────────────────────────────
   n8n:
     image: n8nio/n8n:1.45.1
@@ -355,23 +282,6 @@ services:
       - /home/node/.n8n
 
   # ─── Misc Filler Services ─────────────────────────────────────
-  whoami-1:
-    image: traefik/whoami
-    container_name: whoami-1
-    ports:
-      - "9901:80"
-
-  whoami-2:
-    image: traefik/whoami
-    container_name: whoami-2
-    ports:
-      - "9902:80"
-
-  whoami-3:
-    image: traefik/whoami
-    container_name: whoami-3
-    ports:
-      - "9903:80"
 
   httpbin:
     image: kennethreitz/httpbin
@@ -386,7 +296,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     tmpfs:
       - /data
-    # Resolved conflict: Changed HTTP host port from 9000 to 9002 (9000 is used by minio)
+
     ports:
       - "9443:9443"
       - "9002:9000"

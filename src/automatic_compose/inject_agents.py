@@ -14,14 +14,17 @@ AGENT_TEMPLATE = """
     network_mode: "service:{name}"
     depends_on:
       - {name}
+    restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
       - MY_CONTAINER_NAME=agent-{name}
       - PYTHONUNBUFFERED=1
-\"\"\"
 
-UDP_RELAY_TEMPLATE = \"\"\"
+      
+"""
+
+UDP_RELAY_TEMPLATE = """
   udp-relay:
     image: alpine/socat
     container_name: udp-relay
@@ -35,7 +38,7 @@ networks:
     ipam:
       config:
         - subnet: 172.25.0.0/16
-\"\"\"
+"""
 
 def inject_agents(input_file, output_file):
     with open(input_file, 'r') as f:
