@@ -1,0 +1,5 @@
+- [ ] Test monitor on my pc with a simple compose on docker compose
+- [ ] Test moderate connection load on keegan's folder
+- [ ] Test heavy connection load on jamilly's folder
+- [ ] Test both connecting and spinning up at the same time
+- [ ] Se houver tempo ir dando spin up a various containers one at a time
