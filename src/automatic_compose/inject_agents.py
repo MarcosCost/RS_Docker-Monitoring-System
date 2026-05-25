@@ -80,34 +80,11 @@ def inject_agents(input_file, output_file):
             print(f"  > Processing service: {service_name}")
             
             has_container_name = any("container_name:" in l.strip() for l in block)
-            has_udp_port = any("9999:9999/udp" in l for l in block)
             
             if not has_container_name:
                 print(f"WARNING: Service '{service_name}' does not have a 'container_name' defined!")
 
-            # Inject Port if missing
-            if not has_udp_port:
-                print(f"    + Injecting UDP port 9999 into '{service_name}'")
-                
-                # Check if 'ports:' exists in the block
-                ports_index = -1
-                for idx, l in enumerate(block):
-                    if l.strip() == "ports:":
-                        ports_index = idx
-                        break
-                
-                if ports_index != -1:
-                    # Insert right after 'ports:' line
-                    block.insert(ports_index + 1, "      - \"9999:9999/udp\"\n")
-                else:
-                    # Add 'ports:' section at the end of the block (before trailing empty lines)
-                    insert_at = len(block)
-                    while insert_at > 0 and block[insert_at-1].strip() == "":
-                        insert_at -= 1
-                    block.insert(insert_at, "    ports:\n")
-                    block.insert(insert_at + 1, "      - \"9999:9999/udp\"\n")
-
-            # Add the modified block
+            # Add the block
             new_lines.extend(block)
             
             # Append the Agent template
@@ -117,6 +94,9 @@ def inject_agents(input_file, output_file):
         # 3. Default: just copy the line
         new_lines.append(line)
         i += 1
+
+    # Add UDP Relay and Networks at the end
+    new_lines.append(UDP_RELAY_TEMPLATE)
 
     with open(output_file, 'w') as f:
         f.writelines(new_lines)
