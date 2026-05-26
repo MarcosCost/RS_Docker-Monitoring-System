@@ -12,9 +12,9 @@ services:
     ports:
       - "1883:1883"
     volumes:
-      - ../mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
-      - ../mosquitto/mosquitto-data:/mosquitto/data
-      - ../mosquitto/mosquitto-log:/mosquitto/log
+      - ../../mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - ../../mosquitto/mosquitto-data:/mosquitto/data
+      - ../../mosquitto/mosquitto-log:/mosquitto/log
     restart: always
 
   monitor-service:
