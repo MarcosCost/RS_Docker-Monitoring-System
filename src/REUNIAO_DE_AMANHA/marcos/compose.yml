@@ -18,7 +18,7 @@ services:
     restart: always
 
   monitor-service:
-    build: ../monitor
+    build: ../../monitor
     container_name: dashboard-monitor
     network_mode: host
     depends_on:

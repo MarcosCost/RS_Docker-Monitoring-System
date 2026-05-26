@@ -22,7 +22,7 @@ services:
   # 2. Web Application (Used to test routing)
 
   agent-traefik:
-    build: ../agent
+    build: ../../agent
     container_name: agent-traefik
     network_mode: "service:traefik"
     depends_on:
@@ -44,7 +44,7 @@ services:
   # 3. Primary Database
 
   agent-whoami:
-    build: ../agent
+    build: ../../agent
     container_name: agent-whoami
     network_mode: "service:whoami"
     depends_on:
@@ -70,7 +70,7 @@ services:
   # 4. In-Memory Cache
 
   agent-postgres:
-    build: ../agent
+    build: ../../agent
     container_name: agent-postgres
     network_mode: "service:postgres"
     depends_on:
@@ -89,7 +89,7 @@ services:
     ports:
       - "6379:6379"
   agent-redis:
-    build: ../agent
+    build: ../../agent
     container_name: agent-redis
     network_mode: "service:redis"
     depends_on:

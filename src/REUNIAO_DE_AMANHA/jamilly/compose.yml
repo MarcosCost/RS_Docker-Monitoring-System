@@ -20,7 +20,7 @@ services:
 
 
   agent-postgres-primary:
-    build: ../agent
+    build: ../../agent
     container_name: agent-postgres-primary
     network_mode: "service:postgres-primary"
     depends_on:
@@ -47,7 +47,7 @@ services:
 
 
   agent-postgres-replica:
-    build: ../agent
+    build: ../../agent
     container_name: agent-postgres-replica
     network_mode: "service:postgres-replica"
     depends_on:
@@ -75,7 +75,7 @@ services:
 
 
   agent-mysql:
-    build: ../agent
+    build: ../../agent
     container_name: agent-mysql
     network_mode: "service:mysql"
     depends_on:
@@ -101,7 +101,7 @@ services:
 
 
   agent-mongodb:
-    build: ../agent
+    build: ../../agent
     container_name: agent-mongodb
     network_mode: "service:mongodb"
     depends_on:
@@ -123,7 +123,7 @@ services:
 
 
   agent-redis-cache:
-    build: ../agent
+    build: ../../agent
     container_name: agent-redis-cache
     network_mode: "service:redis-cache"
     depends_on:
@@ -145,7 +145,7 @@ services:
 
 
   agent-redis-sessions:
-    build: ../agent
+    build: ../../agent
     container_name: agent-redis-sessions
     network_mode: "service:redis-sessions"
     depends_on:
@@ -173,7 +173,7 @@ services:
 
 
   agent-cassandra:
-    build: ../agent
+    build: ../../agent
     container_name: agent-cassandra
     network_mode: "service:cassandra"
     depends_on:
@@ -204,7 +204,7 @@ services:
   # ─── Message Brokers ──────────────────────────────────────────
 
   agent-influxdb:
-    build: ../agent
+    build: ../../agent
     container_name: agent-influxdb
     network_mode: "service:influxdb"
     depends_on:
@@ -236,7 +236,7 @@ services:
 
 
   agent-redpanda:
-    build: ../agent
+    build: ../../agent
     container_name: agent-redpanda
     network_mode: "service:redpanda"
     depends_on:
@@ -263,7 +263,7 @@ services:
   # ─── Search ───────────────────────────────────────────────────
 
   agent-rabbitmq:
-    build: ../agent
+    build: ../../agent
     container_name: agent-rabbitmq
     network_mode: "service:rabbitmq"
     depends_on:
@@ -291,7 +291,7 @@ services:
 
 
   agent-elasticsearch:
-    build: ../agent
+    build: ../../agent
     container_name: agent-elasticsearch
     network_mode: "service:elasticsearch"
     depends_on:
@@ -317,7 +317,7 @@ services:
   # ─── Caching / KV ─────────────────────────────────────────────
 
   agent-kibana:
-    build: ../agent
+    build: ../../agent
     container_name: agent-kibana
     network_mode: "service:kibana"
     depends_on:
@@ -339,7 +339,7 @@ services:
 
 
   agent-memcached:
-    build: ../agent
+    build: ../../agent
     container_name: agent-memcached
     network_mode: "service:memcached"
     depends_on:
@@ -366,7 +366,7 @@ services:
   # ─── Observability ────────────────────────────────────────────
 
   agent-etcd:
-    build: ../agent
+    build: ../../agent
     container_name: agent-etcd
     network_mode: "service:etcd"
     depends_on:
@@ -389,7 +389,7 @@ services:
 
 
   agent-prometheus:
-    build: ../agent
+    build: ../../agent
     container_name: agent-prometheus
     network_mode: "service:prometheus"
     depends_on:
@@ -418,7 +418,7 @@ services:
 
 
   agent-grafana:
-    build: ../agent
+    build: ../../agent
     container_name: agent-grafana
     network_mode: "service:grafana"
     depends_on:
@@ -441,7 +441,7 @@ services:
 
 
   agent-loki:
-    build: ../agent
+    build: ../../agent
     container_name: agent-loki
     network_mode: "service:loki"
     depends_on:
@@ -466,7 +466,7 @@ services:
 
 
   agent-jaeger:
-    build: ../agent
+    build: ../../agent
     container_name: agent-jaeger
     network_mode: "service:jaeger"
     depends_on:
@@ -493,7 +493,7 @@ services:
 
 
   agent-cadvisor:
-    build: ../agent
+    build: ../../agent
     container_name: agent-cadvisor
     network_mode: "service:cadvisor"
     depends_on:
@@ -523,7 +523,7 @@ services:
   # ─── Dev Tools / Admin UIs ────────────────────────────────────
 
   agent-node-exporter:
-    build: ../agent
+    build: ../../agent
     container_name: agent-node-exporter
     network_mode: "service:node-exporter"
     depends_on:
@@ -551,7 +551,7 @@ services:
 
 
   agent-pgadmin:
-    build: ../agent
+    build: ../../agent
     container_name: agent-pgadmin
     network_mode: "service:pgadmin"
     depends_on:
@@ -579,7 +579,7 @@ services:
 
 
   agent-mongo-express:
-    build: ../agent
+    build: ../../agent
     container_name: agent-mongo-express
     network_mode: "service:mongo-express"
     depends_on:
@@ -603,7 +603,7 @@ services:
 
 
   agent-redis-commander:
-    build: ../agent
+    build: ../../agent
     container_name: agent-redis-commander
     network_mode: "service:redis-commander"
     depends_on:
@@ -628,7 +628,7 @@ services:
   # ─── Reverse Proxy / Ingress ──────────────────────────────────
 
   agent-kafka-ui:
-    build: ../agent
+    build: ../../agent
     container_name: agent-kafka-ui
     network_mode: "service:kafka-ui"
     depends_on:
@@ -650,7 +650,7 @@ services:
 
 
   agent-nginx:
-    build: ../agent
+    build: ../../agent
     container_name: agent-nginx
     network_mode: "service:nginx"
     depends_on:
@@ -681,7 +681,7 @@ services:
   # ─── Object Storage ───────────────────────────────────────────
 
   agent-traefik:
-    build: ../agent
+    build: ../../agent
     container_name: agent-traefik
     network_mode: "service:traefik"
     depends_on:
@@ -710,7 +710,7 @@ services:
   # ─── Auth ─────────────────────────────────────────────────────
 
   agent-minio:
-    build: ../agent
+    build: ../../agent
     container_name: agent-minio
     network_mode: "service:minio"
     depends_on:
@@ -742,7 +742,7 @@ services:
   # ─── CI / Task Runners ────────────────────────────────────────
 
   agent-keycloak:
-    build: ../agent
+    build: ../../agent
     container_name: agent-keycloak
     network_mode: "service:keycloak"
     depends_on:
@@ -777,7 +777,7 @@ services:
   # ─── Misc Filler Services ─────────────────────────────────────
 
   agent-n8n:
-    build: ../agent
+    build: ../../agent
     container_name: agent-n8n
     network_mode: "service:n8n"
     depends_on:
@@ -798,7 +798,7 @@ services:
 
 
   agent-whoami-1:
-    build: ../agent
+    build: ../../agent
     container_name: agent-whoami-1
     network_mode: "service:whoami-1"
     depends_on:
@@ -819,7 +819,7 @@ services:
 
 
   agent-whoami-2:
-    build: ../agent
+    build: ../../agent
     container_name: agent-whoami-2
     network_mode: "service:whoami-2"
     depends_on:
@@ -840,7 +840,7 @@ services:
 
 
   agent-whoami-3:
-    build: ../agent
+    build: ../../agent
     container_name: agent-whoami-3
     network_mode: "service:whoami-3"
     depends_on:
@@ -861,7 +861,7 @@ services:
 
 
   agent-httpbin:
-    build: ../agent
+    build: ../../agent
     container_name: agent-httpbin
     network_mode: "service:httpbin"
     depends_on:
@@ -886,7 +886,7 @@ services:
       - "9443:9443"
       - "9002:9000"
   agent-portainer:
-    build: ../agent
+    build: ../../agent
     container_name: agent-portainer
     network_mode: "service:portainer"
     depends_on:
