@@ -1,0 +1,530 @@
+services:
+
+  # ─── Databases ───────────────────────────────────────────────
+  postgres-primary:
+    image: postgres:16.9-alpine3.21
+    container_name: postgres-primary
+    environment:
+      POSTGRES_DB: maindb
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: supersecret
+    ports:
+      - "5432:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  agent-postgres-primary:
+    build: ../../agent
+    container_name: agent-postgres-primary
+    network_mode: "service:postgres-primary"
+    depends_on:
+      - postgres-primary
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - MY_CONTAINER_NAME=agent-postgres-primary
+      - PYTHONUNBUFFERED=1
+
+  postgres-replica:
+    image: postgres:16.9-alpine3.21
+    container_name: postgres-replica
+    environment:
+      POSTGRES_DB: maindb
+      POSTGRES_USER: readonly
+      POSTGRES_PASSWORD: readonly123
+    ports:
+      - "5433:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+
+  agent-postgres-replica:
+    build: ../../agent
+    container_name: agent-postgres-replica
+    network_mode: "service:postgres-replica"
+    depends_on:
+      - postgres-replica
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - MY_CONTAINER_NAME=agent-postgres-replica
+      - PYTHONUNBUFFERED=1
+
+  mysql:
+    image: mariadb:11.4.5
+    container_name: mysql
+    environment:
+      MARIADB_ROOT_PASSWORD: rootpass
+      MARIADB_DATABASE: legacydb
+      MARIADB_USER: app
+      MARIADB_PASSWORD: apppass
+    ports:
+      - "3306:3306"
+    tmpfs:
+      - /var/lib/mysql
+
+  agent-mysql:
+    build: ../../agent
+    container_name: agent-mysql
+    network_mode: "service:mysql"
+    depends_on:
+      - mysql
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - MY_CONTAINER_NAME=agent-mysql
+      - PYTHONUNBUFFERED=1
+
+  mongodb:
+    image: mongo:7.0.21
+    container_name: mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: mongopass
+    ports:
+      - "27017:27017"
+    tmpfs:
+      - /data/db
+
+  agent-mongodb:
+    build: ../../agent
+    container_name: agent-mongodb
+    network_mode: "service:mongodb"
+    depends_on:
+      - mongodb
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - MY_CONTAINER_NAME=agent-mongodb
+      - PYTHONUNBUFFERED=1
+
+  # ─── Cache / KV ───────────────────────────────────────────────
+  redis-cache:
+    image: redis:7.4.3-alpine3.21
+    container_name: redis-cache
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+
+  agent-redis-cache:
+    build: ../../agent
+    container_name: agent-redis-cache
+    network_mode: "service:redis-cache"
+    depends_on:
+      - redis-cache
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - MY_CONTAINER_NAME=agent-redis-cache
+      - PYTHONUNBUFFERED=1
+
+  redis-sessions:
+    image: redis:7.4.3-alpine3.21
+    container_name: redis-sessions
+    command: redis-server --requirepass sessionpassword
+    ports:
+      - "6380:6379"
+
+  agent-redis-sessions:
+    build: ../../agent
+    container_name: agent-redis-sessions
+    network_mode: "service:redis-sessions"
+    depends_on:
+      - redis-sessions
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - MY_CONTAINER_NAME=agent-redis-sessions
+      - PYTHONUNBUFFERED=1
+
+  memcached:
+    image: memcached:1.6.38-alpine3.21
+    container_name: memcached
+    ports:
+      - "11211:11211"
+    command: memcached -m 128
+
+  agent-memcached:
+    build: ../../agent
+    container_name: agent-memcached
+    network_mode: "service:memcached"
+    depends_on:
+      - memcached
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - MY_CONTAINER_NAME=agent-memcached
+      - PYTHONUNBUFFERED=1
+
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.13
+    container_name: etcd
+    command:
+      - etcd
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --advertise-client-urls=http://0.0.0.0:2379
+    ports:
+      - "2379:2379"
+      - "2380:2380"
+
+  agent-etcd:
+    build: ../../agent
+    container_name: agent-etcd
+    network_mode: "service:etcd"
+    depends_on:
+      - etcd
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - MY_CONTAINER_NAME=agent-etcd
+      - PYTHONUNBUFFERED=1
+
+  # ─── Message Brokers ──────────────────────────────────────────
+  rabbitmq:
+    image: rabbitmq:3.13.7-alpine
+    container_name: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: rabbit
+      RABBITMQ_DEFAULT_PASS: rabbitpass
+    ports:
+      - "5672:5672"
+    tmpfs:
+      - /var/lib/rabbitmq
+
+  agent-rabbitmq:
+    build: ../../agent
+    container_name: agent-rabbitmq
+    network_mode: "service:rabbitmq"
+    depends_on:
+      - rabbitmq
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - MY_CONTAINER_NAME=agent-rabbitmq
+      - PYTHONUNBUFFERED=1
+
+  # ─── Observability ────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.51.2
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    tmpfs:
+      - /prometheus
+
+  agent-prometheus:
+    build: ../../agent
+    container_name: agent-prometheus
+    network_mode: "service:prometheus"
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - MY_CONTAINER_NAME=agent-prometheus
+      - PYTHONUNBUFFERED=1
+
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: grafana
+    depends_on:
+      - prometheus
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: grafanapass
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "3001:3000"
+    tmpfs:
+      - /var/lib/grafana
+
+  agent-grafana:
+    build: ../../agent
+    container_name: agent-grafana
+    network_mode: "service:grafana"
+    depends_on:
+      - grafana
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - MY_CONTAINER_NAME=agent-grafana
+      - PYTHONUNBUFFERED=1
+
+  loki:
+    image: grafana/loki:2.9.7
+    container_name: loki
+    ports:
+      - "3100:3100"
+    tmpfs:
+      - /loki
+
+  agent-loki:
+    build: ../../agent
+    container_name: agent-loki
+    network_mode: "service:loki"
+    depends_on:
+      - loki
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - MY_CONTAINER_NAME=agent-loki
+      - PYTHONUNBUFFERED=1
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: cadvisor
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+    ports:
+      - "8080:8080"
+
+  agent-cadvisor:
+    build: ../../agent
+    container_name: agent-cadvisor
+    network_mode: "service:cadvisor"
+    depends_on:
+      - cadvisor
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - MY_CONTAINER_NAME=agent-cadvisor
+      - PYTHONUNBUFFERED=1
+
+  node-exporter:
+    image: prom/node-exporter:v1.7.0
+    container_name: node-exporter
+    pid: host
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+    ports:
+      - "9100:9100"
+
+  agent-node-exporter:
+    build: ../../agent
+    container_name: agent-node-exporter
+    network_mode: "service:node-exporter"
+    depends_on:
+      - node-exporter
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - MY_CONTAINER_NAME=agent-node-exporter
+      - PYTHONUNBUFFERED=1
+
+  # ─── Reverse Proxy / Ingress ──────────────────────────────────
+  nginx:
+    image: nginx:1.27.5-alpine3.21
+    container_name: nginx
+    ports:
+      - "80:80"
+      - "443:443"
+
+  agent-nginx:
+    build: ../../agent
+    container_name: agent-nginx
+    network_mode: "service:nginx"
+    depends_on:
+      - nginx
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - MY_CONTAINER_NAME=agent-nginx
+      - PYTHONUNBUFFERED=1
+
+  traefik:
+    image: traefik:v3.4.1
+    container_name: traefik
+    environment:
+      - DOCKER_API_VERSION=1.45
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--entrypoints.web.address=:8888"
+    ports:
+      - "8888:8888"
+      - "8484:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  agent-traefik:
+    build: ../../agent
+    container_name: agent-traefik
+    network_mode: "service:traefik"
+    depends_on:
+      - traefik
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - MY_CONTAINER_NAME=agent-traefik
+      - PYTHONUNBUFFERED=1
+
+  # ─── Object Storage ───────────────────────────────────────────
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    container_name: minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    tmpfs:
+      - /data
+
+  agent-minio:
+    build: ../../agent
+    container_name: agent-minio
+    network_mode: "service:minio"
+    depends_on:
+      - minio
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - MY_CONTAINER_NAME=agent-minio
+      - PYTHONUNBUFFERED=1
+
+  # ─── Misc ─────────────────────────────────────────────────────
+  whoami-1:
+    image: traefik/whoami:v1.10.3
+    container_name: whoami-1
+    ports:
+      - "9901:80"
+
+  agent-whoami-1:
+    build: ../../agent
+    container_name: agent-whoami-1
+    network_mode: "service:whoami-1"
+    depends_on:
+      - whoami-1
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - MY_CONTAINER_NAME=agent-whoami-1
+      - PYTHONUNBUFFERED=1
+
+  whoami-2:
+    image: traefik/whoami:v1.10.3
+    container_name: whoami-2
+    ports:
+      - "9902:80"
+
+  agent-whoami-2:
+    build: ../../agent
+    container_name: agent-whoami-2
+    network_mode: "service:whoami-2"
+    depends_on:
+      - whoami-2
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - MY_CONTAINER_NAME=agent-whoami-2
+      - PYTHONUNBUFFERED=1
+
+  whoami-3:
+    image: traefik/whoami:v1.10.3
+    container_name: whoami-3
+    ports:
+      - "9903:80"
+
+  agent-whoami-3:
+    build: ../../agent
+    container_name: agent-whoami-3
+    network_mode: "service:whoami-3"
+    depends_on:
+      - whoami-3
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - MY_CONTAINER_NAME=agent-whoami-3
+      - PYTHONUNBUFFERED=1
+
+  httpbin:
+    image: kennethreitz/httpbin
+    container_name: httpbin
+    ports:
+      - "9904:80"
+
+  agent-httpbin:
+    build: ../../agent
+    container_name: agent-httpbin
+    network_mode: "service:httpbin"
+    depends_on:
+      - httpbin
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - MY_CONTAINER_NAME=agent-httpbin
+      - PYTHONUNBUFFERED=1
+
+  portainer:
+    image: portainer/portainer-ce:2.20.3
+    container_name: portainer
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    tmpfs:
+      - /data
+    ports:
+      - "9443:9443"
+      - "9002:9000"
+
+  agent-portainer:
+    build: ../../agent
+    container_name: agent-portainer
+    network_mode: "service:portainer"
+    depends_on:
+      - portainer
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - MY_CONTAINER_NAME=agent-portainer
+      - PYTHONUNBUFFERED=1
+
+  udp-relay:
+    image: alpine/socat:1.8.0.1
+    container_name: udp-relay
+    ports:
+      - "9999:9999/udp"
+    command: udp-listen:9999,fork,reuseaddr udp-datagram:172.25.255.255:9999,broadcast
+
+networks:
+  default:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16

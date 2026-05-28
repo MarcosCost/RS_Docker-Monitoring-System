@@ -1,0 +1,107 @@
+services:
+  # 1. Reverse Proxy
+  traefik:
+    image: traefik:v3.4.1
+    container_name: test-traefik
+    environment:
+      - DOCKER_API_VERSION=1.45
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  agent-traefik:
+    build: ../../agent
+    container_name: agent-traefik
+    network_mode: "service:traefik"
+    depends_on:
+      - traefik
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - MY_CONTAINER_NAME=agent-traefik
+      - PYTHONUNBUFFERED=1
+
+  # 2. Web Application
+  whoami:
+    image: traefik/whoami:v1.10.3
+    container_name: test-whoami
+    labels:
+      - "traefik.http.routers.whoami.rule=Host(`localhost`)"
+
+  agent-whoami:
+    build: ../../agent
+    container_name: agent-whoami
+    network_mode: "service:whoami"
+    depends_on:
+      - whoami
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - MY_CONTAINER_NAME=agent-whoami
+      - PYTHONUNBUFFERED=1
+
+  # 3. Primary Database
+  postgres:
+    image: postgres:16.9-alpine3.21
+    container_name: test-postgres
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: testdb
+    ports:
+      - "5432:5432"
+
+  agent-postgres:
+    build: ../../agent
+    container_name: agent-postgres
+    network_mode: "service:postgres"
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - MY_CONTAINER_NAME=agent-postgres
+      - PYTHONUNBUFFERED=1
+
+  # 4. In-Memory Cache
+  redis:
+    image: redis:7.4.3-alpine3.21
+    container_name: test-redis
+    ports:
+      - "6379:6379"
+
+  agent-redis:
+    build: ../../agent
+    container_name: agent-redis
+    network_mode: "service:redis"
+    depends_on:
+      - redis
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - MY_CONTAINER_NAME=agent-redis
+      - PYTHONUNBUFFERED=1
+
+  # 5. UDP Relay
+  udp-relay:
+    image: alpine/socat:1.8.0.1
+    container_name: udp-relay
+    ports:
+      - "9999:9999/udp"
+    command: udp-listen:9999,fork,reuseaddr udp-datagram:172.25.255.255:9999,broadcast
+
+networks:
+  default:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16
